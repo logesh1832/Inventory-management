@@ -1,0 +1,21 @@
+{
+  "name": "inventory-management-server",
+  "version": "1.0.0",
+  "description": "Inventory & Batch-Based Stock Management System - Backend",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "keywords": [],
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "pg": "^8.19.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}

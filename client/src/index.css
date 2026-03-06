@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+/* Print-only header: hidden on screen, visible on print */
+.print-only {
+  display: none !important;
+}
+
+@media print {
+  /* Hide sidebar, header, buttons, toasts */
+  aside,
+  header,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Show print-only elements */
+  .print-only {
+    display: flex !important;
+  }
+
+  .print-only-block {
+    display: block !important;
+  }
+
+  /* Full width layout, no background */
+  body,
+  #root,
+  #root > div,
+  #root > div > div {
+    background: white !important;
+    overflow: visible !important;
+    width: 100% !important;
+  }
+
+  /* Remove flex layout so content goes full width */
+  #root > div {
+    display: block !important;
+  }
+
+  main {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Clean invoice card */
+  .print-area {
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* Table borders for print */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  th, td {
+    border-bottom: 1px solid #d1d5db;
+  }
+
+  /* Page settings */
+  @page {
+    margin: 15mm;
+    size: A4;
+  }
+}
