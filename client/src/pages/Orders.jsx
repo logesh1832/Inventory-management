@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import SearchableSelect from '../components/SearchableSelect';
 
 export default function Orders() {
   const navigate = useNavigate();
@@ -72,19 +73,12 @@ export default function Orders() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
-          <select
-            name="customer_id"
+          <SearchableSelect
+            options={customers.map((c) => ({ value: c.id, label: c.customer_name }))}
             value={filters.customer_id}
-            onChange={handleFilterChange}
-            className="border border-gray-300 rounded px-3 py-2 w-full"
-          >
-            <option value="">All Customers</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.customer_name}
-              </option>
-            ))}
-          </select>
+            onChange={(val) => handleFilterChange({ target: { name: 'customer_id', value: val } })}
+            placeholder="All Customers"
+          />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>

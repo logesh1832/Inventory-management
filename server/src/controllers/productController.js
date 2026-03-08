@@ -3,17 +3,17 @@ const pool = require('../config/db');
 // POST /api/products
 const createProduct = async (req, res, next) => {
   try {
-    const { product_name, product_code, unit } = req.body;
+    const { product_name, product_code, unit, unit_price, category, batch_tracking } = req.body;
 
     if (!product_name || !product_code || !unit) {
       return res.status(400).json({ error: 'product_name, product_code, and unit are required' });
     }
 
     const result = await pool.query(
-      `INSERT INTO products (product_name, product_code, unit)
-       VALUES ($1, $2, $3)
+      `INSERT INTO products (product_name, product_code, unit, unit_price, category, batch_tracking)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [product_name.trim(), product_code.trim(), unit.trim()]
+      [product_name.trim(), product_code.trim(), unit.trim(), unit_price || 0, category?.trim() || null, batch_tracking || false]
     );
 
     res.status(201).json(result.rows[0]);
@@ -28,19 +28,47 @@ const createProduct = async (req, res, next) => {
 // GET /api/products
 const getAllProducts = async (req, res, next) => {
   try {
-    const { status } = req.query;
-    let query = 'SELECT * FROM products';
+    const { status, category } = req.query;
+    let query = `SELECT p.*, COALESCE(s.available_stock, 0)::int as available_stock
+                 FROM products p
+                 LEFT JOIN (
+                   SELECT product_id, SUM(quantity_remaining) as available_stock
+                   FROM inventory_batches WHERE quantity_remaining > 0
+                   GROUP BY product_id
+                 ) s ON p.id = s.product_id`;
     const params = [];
+    const conditions = [];
 
     if (status) {
-      query += ' WHERE status = $1';
       params.push(status);
+      conditions.push(`p.status = $${params.length}`);
     }
 
-    query += ' ORDER BY created_at DESC';
+    if (category) {
+      params.push(category);
+      conditions.push(`p.category = $${params.length}`);
+    }
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    query += ' ORDER BY p.created_at DESC';
 
     const result = await pool.query(query, params);
     res.json(result.rows);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /api/products/categories
+const getCategories = async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      "SELECT DISTINCT category FROM products WHERE category IS NOT NULL ORDER BY category"
+    );
+    res.json(result.rows.map(r => r.category));
   } catch (err) {
     next(err);
   }
@@ -50,7 +78,17 @@ const getAllProducts = async (req, res, next) => {
 const getProductById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('SELECT * FROM products WHERE id = $1', [id]);
+    const result = await pool.query(
+      `SELECT p.*, COALESCE(s.available_stock, 0)::int as available_stock
+       FROM products p
+       LEFT JOIN (
+         SELECT product_id, SUM(quantity_remaining) as available_stock
+         FROM inventory_batches WHERE quantity_remaining > 0
+         GROUP BY product_id
+       ) s ON p.id = s.product_id
+       WHERE p.id = $1`,
+      [id]
+    );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Product not found' });
@@ -66,16 +104,19 @@ const getProductById = async (req, res, next) => {
 const updateProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { product_name, unit, status } = req.body;
+    const { product_name, unit, status, unit_price, category, batch_tracking } = req.body;
 
     const result = await pool.query(
       `UPDATE products
        SET product_name = COALESCE($1, product_name),
            unit = COALESCE($2, unit),
-           status = COALESCE($3, status)
-       WHERE id = $4
+           status = COALESCE($3, status),
+           unit_price = COALESCE($4, unit_price),
+           category = COALESCE($5, category),
+           batch_tracking = $6
+       WHERE id = $7
        RETURNING *`,
-      [product_name, unit, status, id]
+      [product_name, unit, status, unit_price, category, batch_tracking !== undefined ? batch_tracking : false, id]
     );
 
     if (result.rows.length === 0) {
@@ -93,13 +134,11 @@ const deleteProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // Check if product exists
     const product = await pool.query('SELECT id FROM products WHERE id = $1', [id]);
     if (product.rows.length === 0) {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    // Check for associated batches
     const batches = await pool.query(
       'SELECT id FROM inventory_batches WHERE product_id = $1 LIMIT 1',
       [id]
@@ -108,7 +147,6 @@ const deleteProduct = async (req, res, next) => {
       return res.status(400).json({ error: 'Cannot delete product with associated batches' });
     }
 
-    // Soft delete
     const result = await pool.query(
       `UPDATE products SET status = 'inactive' WHERE id = $1 RETURNING *`,
       [id]
@@ -123,6 +161,7 @@ const deleteProduct = async (req, res, next) => {
 module.exports = {
   createProduct,
   getAllProducts,
+  getCategories,
   getProductById,
   updateProduct,
   deleteProduct,

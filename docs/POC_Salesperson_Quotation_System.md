@@ -274,65 +274,217 @@ When inventory team clicks "Convert to Order":
 
 ---
 
-### Module 7: Salesperson Dashboard
+### Module 7: Sales Targets
 
-#### 7.1 Dashboard Cards
+Salespersons are assigned sales targets that must be achieved within specific time periods. Admin/Manager sets the targets, and the system tracks progress automatically based on converted orders.
+
+#### 7.1 Target Periods
+
+| Period | Duration | Example |
+|---|---|---|
+| Monthly | 1 month | March 2026 |
+| Quarterly | 3 months | Q1 (Jan-Mar), Q2 (Apr-Jun), Q3 (Jul-Sep), Q4 (Oct-Dec) |
+| Half-Yearly | 6 months | H1 (Jan-Jun), H2 (Jul-Dec) |
+| Yearly | 12 months | FY 2026-27 |
+
+#### 7.2 Target Assignment (Admin)
+- Admin assigns target to each salesperson
+- Target is a **revenue amount** (e.g., Rs. 5,00,000 for March 2026)
+- Can also set **quantity-based targets** per product category (optional)
+- Multiple targets can coexist (monthly + quarterly + yearly for same salesperson)
+- Targets can be edited before the period starts
+
+#### 7.3 Target Tracking (Automatic)
+- When a quotation is **converted to order**, the order amount is added to the salesperson's achieved amount
+- System calculates:
+  - **Target Amount** — what they need to achieve
+  - **Achieved Amount** — sum of converted orders in that period
+  - **Remaining Amount** — target minus achieved
+  - **Achievement %** — (achieved / target) x 100
+  - **Days Remaining** — days left in the period
+
+#### 7.4 Salesperson Target View
+- Salesperson sees their own targets on their dashboard
+- Progress bar showing achievement % for each active period
+- Color-coded:
+  - Green: >= 80% achieved
+  - Yellow: 50-79% achieved
+  - Red: < 50% achieved
+- Breakdown of which orders contributed to the target
+
+#### 7.5 Admin Target Report
+- View all salespersons' target progress in one screen
+- Filter by period (monthly/quarterly/half-yearly/yearly)
+- Sort by achievement % (top performers first)
+- Export option (future scope)
+
+#### Database: `sales_targets` table
+```sql
+CREATE TABLE sales_targets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    salesperson_id UUID NOT NULL REFERENCES users(id),
+    period_type VARCHAR(15) NOT NULL CHECK (period_type IN ('MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'YEARLY')),
+    period_start DATE NOT NULL,
+    period_end DATE NOT NULL,
+    target_amount DECIMAL(12, 2) NOT NULL,
+    achieved_amount DECIMAL(12, 2) DEFAULT 0,
+    status VARCHAR(15) DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'COMPLETED', 'MISSED')),
+    created_by UUID REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(salesperson_id, period_type, period_start)
+);
+```
+
+---
+
+### Module 8: Area Assignment & Geo-Fencing
+
+Each salesperson is assigned a specific geographic area. They can only create customers and quotations within their assigned area. If they try to add a customer outside their area, the system blocks it.
+
+#### 8.1 Area Definition (Admin)
+- Admin defines areas on a Leaflet map by:
+  - **Drawing a polygon** (custom boundary) on the map, OR
+  - **Setting a center point + radius** (circular area in km)
+- Each area has:
+  - Area Name (e.g., "Chennai North", "Bengaluru Central")
+  - Boundary coordinates (polygon points or center + radius)
+  - Description (optional)
+
+#### 8.2 Area Assignment
+- Admin assigns one or more areas to a salesperson
+- A salesperson can have multiple areas
+- Areas can overlap between salespersons (shared territory)
+- Area assignment can be changed anytime by admin
+
+#### 8.3 Geo-Fence Enforcement
+When a salesperson tries to **add a new customer**:
+1. Customer's GPS location is captured
+2. System checks if the location falls **within** the salesperson's assigned area(s)
+3. **If inside area** — customer creation allowed
+4. **If outside area** — customer creation **BLOCKED** with message:
+   > "This location is outside your assigned area. Please contact admin."
+
+#### 8.4 How Geo-Fence Check Works
+- **Polygon method**: Point-in-polygon algorithm (ray casting) — runs in browser, no API needed
+- **Circle method**: Haversine distance formula — if distance from center > radius, block it
+- Both methods are **free**, run locally, no external API required
+
+#### 8.5 Area Visualization
+- Salesperson can see their assigned area boundary on the map (highlighted polygon/circle)
+- When adding a customer, the map shows the boundary so they know where they can operate
+- Admin can see all areas on a single map with different colors per salesperson
+
+#### 8.6 Area Reports (Admin)
+- How many customers per area
+- Revenue per area
+- Which salesperson covers which area
+- Areas with no activity (underperforming territories)
+
+#### Database: `sales_areas` and `salesperson_areas` tables
+```sql
+CREATE TABLE sales_areas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    area_name VARCHAR(100) NOT NULL,
+    description TEXT,
+    boundary_type VARCHAR(10) NOT NULL CHECK (boundary_type IN ('POLYGON', 'CIRCLE')),
+    -- For POLYGON: array of [lat, lng] points stored as JSON
+    boundary_polygon JSONB,
+    -- For CIRCLE: center point + radius
+    center_latitude DECIMAL(10, 8),
+    center_longitude DECIMAL(11, 8),
+    radius_km DECIMAL(6, 2),
+    is_active BOOLEAN DEFAULT true,
+    created_by UUID REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE salesperson_areas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    salesperson_id UUID NOT NULL REFERENCES users(id),
+    area_id UUID NOT NULL REFERENCES sales_areas(id),
+    assigned_at TIMESTAMP DEFAULT NOW(),
+    assigned_by UUID REFERENCES users(id),
+    is_active BOOLEAN DEFAULT true,
+    UNIQUE(salesperson_id, area_id)
+);
+```
+
+---
+
+### Module 9: Salesperson Dashboard
+
+#### 9.1 Dashboard Cards
 - Total Customers (mine)
 - Total Quotations (mine)
 - Pending Quotations (submitted, awaiting review)
 - Approved Quotations
 - Rejected Quotations (need attention)
 
-#### 7.2 Recent Quotations
+#### 9.2 Sales Target Progress
+- Progress bars for each active target period (monthly, quarterly, etc.)
+- Achievement % with color coding
+- Remaining amount and days left
+
+#### 9.3 My Assigned Area
+- Leaflet map showing the salesperson's assigned area boundary
+- Customer pins within the area
+
+#### 9.4 Recent Quotations
 - Last 10 quotations with status
 - Quick action buttons (edit/view/submit)
 
-#### 7.3 My Customers Map
+#### 9.5 My Customers Map
 - Leaflet map with all customer locations pinned
 - Click pin to see customer details
 
 ---
 
-### Module 8: Inventory Team Dashboard
+### Module 10: Inventory Team Dashboard
 
-#### 8.1 Dashboard Cards
+#### 10.1 Dashboard Cards
 - Total Products
 - Total Stock Value
 - Pending Quotations (needs action)
 - Orders Today
 - Low Stock Alerts
 
-#### 8.2 Sub-Menu: Pending Quotations
+#### 10.2 Sub-Menu: Pending Quotations
 - Count badge showing number of pending quotations
 - Quick access to review queue
 
-#### 8.3 Recent Orders
+#### 10.3 Salesperson Target Overview
+- Table showing all salespersons with their current target achievement
+- Quick view: name, area, target, achieved, % complete
+- Click to see detailed breakdown
+
+#### 10.4 Recent Orders
 - Last 10 orders with status
 
-#### 8.4 Low Stock Alerts
+#### 10.5 Low Stock Alerts
 - Products with stock below threshold
 
 ---
 
-### Module 9: Android APK (Capacitor)
+### Module 11: Android APK (Capacitor)
 
-#### 9.1 Setup
+#### 11.1 Setup
 - Capacitor wraps the existing React web app
 - No separate codebase needed
 - Same UI, native app shell
 
-#### 9.2 Features in APK
+#### 11.2 Features in APK
 - All web app features work in the APK
 - GPS access via native Capacitor Geolocation plugin (more reliable than browser API)
 - Push notifications (future scope)
 - Camera access for capturing customer photos (future scope)
 
-#### 9.3 Build Process
+#### 11.3 Build Process
 ```
 React build --> Capacitor sync --> Android Studio --> APK
 ```
 
-#### 9.4 Target
+#### 11.4 Target
 - Android 8.0+ (API level 26+)
 - APK size: ~10-15 MB estimated
 
@@ -415,6 +567,48 @@ ALTER TABLE products ADD COLUMN unit_price DECIMAL(10, 2) DEFAULT 0;
 ALTER TABLE products ADD COLUMN category VARCHAR(100);
 
 ALTER TABLE orders ADD COLUMN quotation_id UUID REFERENCES quotations(id);
+
+-- Sales Targets table (new)
+CREATE TABLE sales_targets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    salesperson_id UUID NOT NULL REFERENCES users(id),
+    period_type VARCHAR(15) NOT NULL CHECK (period_type IN ('MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'YEARLY')),
+    period_start DATE NOT NULL,
+    period_end DATE NOT NULL,
+    target_amount DECIMAL(12, 2) NOT NULL,
+    achieved_amount DECIMAL(12, 2) DEFAULT 0,
+    status VARCHAR(15) DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'COMPLETED', 'MISSED')),
+    created_by UUID REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(salesperson_id, period_type, period_start)
+);
+
+-- Sales Areas table (new)
+CREATE TABLE sales_areas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    area_name VARCHAR(100) NOT NULL,
+    description TEXT,
+    boundary_type VARCHAR(10) NOT NULL CHECK (boundary_type IN ('POLYGON', 'CIRCLE')),
+    boundary_polygon JSONB,
+    center_latitude DECIMAL(10, 8),
+    center_longitude DECIMAL(11, 8),
+    radius_km DECIMAL(6, 2),
+    is_active BOOLEAN DEFAULT true,
+    created_by UUID REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Salesperson-Area Assignment table (new)
+CREATE TABLE salesperson_areas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    salesperson_id UUID NOT NULL REFERENCES users(id),
+    area_id UUID NOT NULL REFERENCES sales_areas(id),
+    assigned_at TIMESTAMP DEFAULT NOW(),
+    assigned_by UUID REFERENCES users(id),
+    is_active BOOLEAN DEFAULT true,
+    UNIQUE(salesperson_id, area_id)
+);
 ```
 
 ---
@@ -449,6 +643,28 @@ ALTER TABLE orders ADD COLUMN quotation_id UUID REFERENCES quotations(id);
 | PATCH | `/api/quotations/:id/reject` | Reject with reason (inventory) |
 | POST | `/api/quotations/:id/convert` | Convert to order (inventory) |
 
+### Sales Targets
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/targets` | List targets (admin: all, salesperson: own) |
+| POST | `/api/targets` | Create target (admin) |
+| PUT | `/api/targets/:id` | Update target (admin) |
+| DELETE | `/api/targets/:id` | Delete target (admin, only if period hasn't started) |
+| GET | `/api/targets/salesperson/:id` | Get specific salesperson's targets |
+| GET | `/api/targets/report` | Target achievement report for all salespersons (admin) |
+
+### Sales Areas
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/areas` | List all areas |
+| POST | `/api/areas` | Create area with boundary (admin) |
+| PUT | `/api/areas/:id` | Update area boundary (admin) |
+| DELETE | `/api/areas/:id` | Delete area (admin) |
+| POST | `/api/areas/assign` | Assign area to salesperson (admin) |
+| DELETE | `/api/areas/assign/:id` | Remove area assignment (admin) |
+| GET | `/api/areas/salesperson/:id` | Get areas assigned to a salesperson |
+| POST | `/api/areas/check-location` | Check if a GPS point is within salesperson's area |
+
 ### Customers (Updated)
 | Method | Endpoint | Description |
 |---|---|---|
@@ -461,18 +677,19 @@ ALTER TABLE orders ADD COLUMN quotation_id UUID REFERENCES quotations(id);
 
 ### Salesperson Screens
 1. Login
-2. Salesperson Dashboard
+2. Salesperson Dashboard (with target progress bars + assigned area map)
 3. My Customers (list)
-4. Add/Edit Customer (with Leaflet map)
+4. Add/Edit Customer (with Leaflet map + area boundary shown)
 5. Customer Detail (with map)
 6. Product Catalog (read-only list)
 7. My Quotations (list with filters)
 8. Create/Edit Quotation (form)
 9. Quotation Detail (view)
+10. My Targets (detailed target breakdown)
 
 ### Inventory Team Screens
 1. Login
-2. Inventory Dashboard (with pending quotations sub-menu)
+2. Inventory Dashboard (pending quotations sub-menu + salesperson target overview)
 3. Pending Quotations (review queue)
 4. Quotation Review & Edit (with stock availability)
 5. Orders List
@@ -483,6 +700,8 @@ ALTER TABLE orders ADD COLUMN quotation_id UUID REFERENCES quotations(id);
 ### Admin Screens
 1. All of the above
 2. User Management (list, create, edit)
+3. Target Management (assign/edit targets per salesperson)
+4. Area Management (draw areas on map, assign to salespersons)
 
 ---
 
@@ -496,9 +715,11 @@ ALTER TABLE orders ADD COLUMN quotation_id UUID REFERENCES quotations(id);
 | Story 4 | Quotation CRUD (salesperson: create, edit, submit, recall) | 2 days |
 | Story 5 | Quotation Review (inventory: review, edit, approve, reject) | 1-2 days |
 | Story 6 | Quotation to Order Conversion (with FIFO) | 1 day |
-| Story 7 | Salesperson Dashboard + Inventory Dashboard updates | 1 day |
-| Story 8 | Android APK with Capacitor | 1 day |
-| **Total** | | **~8-10 days** |
+| Story 7 | Sales Targets (assign, track, progress bars, reports) | 1-2 days |
+| Story 8 | Area Assignment & Geo-Fencing (draw areas, assign, enforce) | 1-2 days |
+| Story 9 | Salesperson Dashboard + Inventory Dashboard updates | 1 day |
+| Story 10 | Android APK with Capacitor | 1 day |
+| **Total** | | **~11-14 days** |
 
 ---
 

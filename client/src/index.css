@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Hide scrollbar but keep scrolling */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* Print-only header: hidden on screen, visible on print */
 .print-only {
   display: none !important;

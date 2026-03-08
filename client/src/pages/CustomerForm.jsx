@@ -77,6 +77,7 @@ export default function CustomerForm() {
       } else {
         await api.post('/customers', payload);
       }
+
       navigate('/customers');
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to save customer';
@@ -107,7 +108,7 @@ export default function CustomerForm() {
         {isEdit ? 'Edit Customer' : 'Add Customer'}
       </h2>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6 max-w-lg">
+      <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6 max-w-2xl">
         {/* Customer Name */}
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">

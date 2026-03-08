@@ -4,7 +4,6 @@ const createOrder = async (req, res, next) => {
   try {
     const { customer_id, order_date, items } = req.body;
 
-    // Validate required fields
     if (!customer_id) {
       return res.status(400).json({ error: 'customer_id is required' });
     }
@@ -12,47 +11,24 @@ const createOrder = async (req, res, next) => {
       return res.status(400).json({ error: 'items must be a non-empty array' });
     }
 
-    for (const item of items) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
       if (!item.product_id) {
-        return res.status(400).json({ error: 'Each item must have a product_id' });
+        return res.status(400).json({ error: `Row ${i + 1}: Product is required` });
       }
       if (!item.quantity || item.quantity <= 0) {
-        return res.status(400).json({ error: 'Each item must have a quantity greater than 0' });
+        return res.status(400).json({ error: `Row ${i + 1}: Quantity must be greater than 0` });
       }
     }
 
-    // Validate customer exists
     const customerCheck = await pool.query('SELECT id FROM customers WHERE id = $1', [customer_id]);
     if (customerCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Customer not found' });
     }
 
-    // Consolidate duplicate product_ids by summing quantities
-    const consolidated = {};
-    for (const item of items) {
-      if (consolidated[item.product_id]) {
-        consolidated[item.product_id] += Number(item.quantity);
-      } else {
-        consolidated[item.product_id] = Number(item.quantity);
-      }
-    }
-    const mergedItems = Object.entries(consolidated).map(([product_id, quantity]) => ({
-      product_id,
-      quantity,
-    }));
-
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-
-      // Validate all products exist
-      for (const item of mergedItems) {
-        const productCheck = await client.query('SELECT id FROM products WHERE id = $1', [item.product_id]);
-        if (productCheck.rows.length === 0) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: `Product ${item.product_id} not found` });
-        }
-      }
 
       // Generate invoice number
       const lastOrder = await client.query(
@@ -76,68 +52,108 @@ const createOrder = async (req, res, next) => {
 
       const deductionDetails = [];
 
-      // Process each item
-      for (const item of mergedItems) {
+      for (const item of items) {
+        const qty = Number(item.quantity);
+
         // Insert order item
-        const orderItemResult = await client.query(
+        await client.query(
           `INSERT INTO order_items (order_id, product_id, quantity)
-           VALUES ($1, $2, $3)
-           RETURNING *`,
-          [order.id, item.product_id, item.quantity]
+           VALUES ($1, $2, $3)`,
+          [order.id, item.product_id, qty]
         );
 
-        // Fetch available batches in FIFO order with row locking
-        const batchesResult = await client.query(
-          `SELECT id, batch_number, quantity_remaining
-           FROM inventory_batches
-           WHERE product_id = $1 AND quantity_remaining > 0
-           ORDER BY received_date ASC, created_at ASC
-           FOR UPDATE`,
-          [item.product_id]
-        );
+        if (item.batch_id) {
+          // Manual batch selection — deduct from specific batch
+          const batchResult = await client.query(
+            `SELECT id, batch_number, quantity_remaining
+             FROM inventory_batches
+             WHERE id = $1 AND product_id = $2 AND quantity_remaining > 0
+             FOR UPDATE`,
+            [item.batch_id, item.product_id]
+          );
 
-        const totalAvailable = batchesResult.rows.reduce((sum, b) => sum + b.quantity_remaining, 0);
-        if (totalAvailable < item.quantity) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({
-            error: `Insufficient stock for product ${item.product_id}. Available: ${totalAvailable}, Requested: ${item.quantity}`,
-          });
-        }
+          if (batchResult.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: `Batch not found or empty for product ${item.product_id}` });
+          }
 
-        // FIFO deduction
-        let remaining = item.quantity;
-        const itemDeductions = [];
-
-        for (const batch of batchesResult.rows) {
-          if (remaining <= 0) break;
-
-          const deduct = Math.min(remaining, batch.quantity_remaining);
+          const batch = batchResult.rows[0];
+          if (batch.quantity_remaining < qty) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({
+              error: `Insufficient stock in batch ${batch.batch_number}. Available: ${batch.quantity_remaining}, Requested: ${qty}`,
+            });
+          }
 
           await client.query(
             'UPDATE inventory_batches SET quantity_remaining = quantity_remaining - $1 WHERE id = $2',
-            [deduct, batch.id]
+            [qty, batch.id]
           );
 
           await client.query(
             `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id)
              VALUES ($1, $2, $3, 'OUT', 'ORDER', $4)`,
-            [item.product_id, batch.id, deduct, order.id]
+            [item.product_id, batch.id, qty, order.id]
           );
 
-          itemDeductions.push({
-            batch_id: batch.id,
-            batch_number: batch.batch_number,
-            quantity_deducted: deduct,
+          deductionDetails.push({
+            product_id: item.product_id,
+            quantity: qty,
+            deductions: [{ batch_id: batch.id, batch_number: batch.batch_number, quantity_deducted: qty }],
           });
+        } else {
+          // FIFO deduction (no batch specified)
+          const batchesResult = await client.query(
+            `SELECT id, batch_number, quantity_remaining
+             FROM inventory_batches
+             WHERE product_id = $1 AND quantity_remaining > 0
+             ORDER BY received_date ASC, created_at ASC
+             FOR UPDATE`,
+            [item.product_id]
+          );
 
-          remaining -= deduct;
+          const totalAvailable = batchesResult.rows.reduce((sum, b) => sum + b.quantity_remaining, 0);
+          if (totalAvailable < qty) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({
+              error: `Insufficient stock for product ${item.product_id}. Available: ${totalAvailable}, Requested: ${qty}`,
+            });
+          }
+
+          let remaining = qty;
+          const itemDeductions = [];
+
+          for (const batch of batchesResult.rows) {
+            if (remaining <= 0) break;
+
+            const deduct = Math.min(remaining, batch.quantity_remaining);
+
+            await client.query(
+              'UPDATE inventory_batches SET quantity_remaining = quantity_remaining - $1 WHERE id = $2',
+              [deduct, batch.id]
+            );
+
+            await client.query(
+              `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id)
+               VALUES ($1, $2, $3, 'OUT', 'ORDER', $4)`,
+              [item.product_id, batch.id, deduct, order.id]
+            );
+
+            itemDeductions.push({
+              batch_id: batch.id,
+              batch_number: batch.batch_number,
+              quantity_deducted: deduct,
+            });
+
+            remaining -= deduct;
+          }
+
+          deductionDetails.push({
+            product_id: item.product_id,
+            quantity: qty,
+            deductions: itemDeductions,
+          });
         }
-
-        deductionDetails.push({
-          product_id: item.product_id,
-          quantity: item.quantity,
-          deductions: itemDeductions,
-        });
       }
 
       await client.query('COMMIT');
@@ -203,7 +219,6 @@ const getOrderById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // Order + customer
     const orderResult = await pool.query(
       `SELECT o.*, c.customer_name, c.phone, c.email, c.address
        FROM orders o
@@ -218,7 +233,6 @@ const getOrderById = async (req, res, next) => {
 
     const order = orderResult.rows[0];
 
-    // Order items + products
     const itemsResult = await pool.query(
       `SELECT oi.*, p.product_name, p.product_code
        FROM order_items oi
@@ -227,7 +241,6 @@ const getOrderById = async (req, res, next) => {
       [id]
     );
 
-    // Stock movements for this order
     const movementsResult = await pool.query(
       `SELECT sm.*, ib.batch_number
        FROM stock_movements sm
@@ -236,7 +249,6 @@ const getOrderById = async (req, res, next) => {
       [id]
     );
 
-    // Group movements by product_id and attach to items
     const movementsByProduct = {};
     for (const m of movementsResult.rows) {
       if (!movementsByProduct[m.product_id]) {

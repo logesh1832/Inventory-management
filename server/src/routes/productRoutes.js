@@ -3,15 +3,21 @@ const router = express.Router();
 const {
   createProduct,
   getAllProducts,
+  getCategories,
   getProductById,
   updateProduct,
   deleteProduct,
 } = require('../controllers/productController');
+const { requireRole } = require('../middleware/auth');
 
-router.post('/', createProduct);
+// All users can read products
 router.get('/', getAllProducts);
+router.get('/categories', getCategories);
 router.get('/:id', getProductById);
-router.put('/:id', updateProduct);
-router.delete('/:id', deleteProduct);
+
+// Only admin/inventory can modify
+router.post('/', requireRole('admin', 'inventory'), createProduct);
+router.put('/:id', requireRole('admin', 'inventory'), updateProduct);
+router.delete('/:id', requireRole('admin', 'inventory'), deleteProduct);
 
 module.exports = router;

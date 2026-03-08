@@ -1,115 +1,205 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
+import SearchableSelect from '../components/SearchableSelect';
 
 export default function Batches() {
+  const [tab, setTab] = useState('entries'); // 'entries' | 'batches'
+  const [entries, setEntries] = useState([]);
   const [batches, setBatches] = useState([]);
   const [products, setProducts] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [filterProductId, setFilterProductId] = useState('');
+  const [filterSupplierId, setFilterSupplierId] = useState('');
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState(null);
-
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  const fetchBatches = async (productId) => {
-    try {
-      setLoading(true);
-      const params = productId ? { product_id: productId } : {};
-      const res = await api.get('/batches', { params });
-      setBatches(res.data);
-    } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to load batches', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
     api.get('/products').then((res) => setProducts(res.data)).catch(() => {});
-    fetchBatches('');
+    api.get('/customers').then((res) => setSuppliers(res.data)).catch(() => {});
   }, []);
 
-  const handleFilterChange = (e) => {
-    const val = e.target.value;
-    setFilterProductId(val);
-    fetchBatches(val);
-  };
+  useEffect(() => {
+    setLoading(true);
+    if (tab === 'entries') {
+      const params = {};
+      if (filterProductId) params.product_id = filterProductId;
+      if (filterSupplierId) params.supplier_id = filterSupplierId;
+      api.get('/batches/stock-entries', { params })
+        .then((res) => setEntries(res.data))
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    } else {
+      const params = filterProductId ? { product_id: filterProductId } : {};
+      api.get('/batches', { params })
+        .then((res) => setBatches(res.data))
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    }
+  }, [tab, filterProductId, filterSupplierId]);
 
   return (
     <div>
-      {toast && (
-        <div
-          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded shadow-lg text-white ${
-            toast.type === 'error' ? 'bg-red-500' : 'bg-green-500'
-          }`}
-        >
-          {toast.message}
-        </div>
-      )}
-
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Batches</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Batches & Stock</h2>
         <Link
           to="/batches/new"
-          className="bg-yellow-500 text-gray-900 px-4 py-2 rounded hover:bg-yellow-600 transition-colors"
+          className="bg-yellow-500 text-gray-900 px-4 py-2 rounded hover:bg-yellow-600 transition-colors font-semibold text-sm"
         >
-          Add New Batch
+          + Stock Entry
         </Link>
       </div>
 
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Product</label>
-        <select
-          value={filterProductId}
-          onChange={handleFilterChange}
-          className="border border-gray-300 rounded px-3 py-2 w-64"
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit">
+        <button
+          onClick={() => setTab('entries')}
+          className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
+            tab === 'entries' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
         >
-          <option value="">All Products</option>
-          {products.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.product_name}
-            </option>
-          ))}
-        </select>
+          Stock Entries
+        </button>
+        <button
+          onClick={() => setTab('batches')}
+          className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
+            tab === 'batches' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Batch Summary
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3 mb-4">
+        <div className="w-56">
+          <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
+          <SearchableSelect
+            options={products.map((p) => ({ value: p.id, label: p.product_name, sublabel: p.product_code }))}
+            value={filterProductId}
+            onChange={setFilterProductId}
+            placeholder="All Products"
+          />
+        </div>
+        {tab === 'entries' && (
+          <div className="w-56">
+            <label className="block text-xs font-medium text-gray-500 mb-1">Supplier</label>
+            <SearchableSelect
+              options={suppliers.map((s) => ({ value: s.id, label: s.customer_name }))}
+              value={filterSupplierId}
+              onChange={setFilterSupplierId}
+              placeholder="All Suppliers"
+            />
+          </div>
+        )}
       </div>
 
       {loading ? (
         <p className="text-gray-500">Loading...</p>
-      ) : batches.length === 0 ? (
-        <p className="text-gray-500">No batches found.</p>
-      ) : (
-        <div className="overflow-x-auto bg-white rounded shadow">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch Number</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty Received</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty Remaining</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Received Date</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {batches.map((b) => (
-                <tr
-                  key={b.id}
-                  className={b.quantity_remaining === 0 ? 'bg-gray-100 text-gray-400' : ''}
-                >
-                  <td className="px-6 py-4 whitespace-nowrap">{b.batch_number}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{b.product_name}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{b.quantity_received}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{b.quantity_remaining}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {new Date(b.received_date).toLocaleDateString()}
-                  </td>
+      ) : tab === 'entries' ? (
+        /* Stock Entries Tab */
+        entries.length === 0 ? (
+          <p className="text-gray-500">No stock entries found.</p>
+        ) : (
+          <div className="overflow-x-auto bg-white rounded-lg shadow">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mfg / Expiry</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty Received</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {entries.map((e) => (
+                  <tr key={e.id} className="hover:bg-gray-50">
+                    <td className="px-5 py-3 text-sm text-gray-700 whitespace-nowrap">
+                      {e.received_date
+                        ? new Date(e.received_date).toLocaleDateString()
+                        : new Date(e.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-5 py-3 text-sm text-gray-700">{e.supplier_name || '-'}</td>
+                    <td className="px-5 py-3 text-sm text-gray-700">
+                      <span>{e.product_name}</span>
+                      <span className="text-gray-400 text-xs ml-1">({e.product_code})</span>
+                    </td>
+                    <td className="px-5 py-3 text-sm">
+                      {e.batch_number ? (
+                        <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
+                          {e.batch_number}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">No Batch</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-sm text-gray-500 whitespace-nowrap">
+                      {e.manufacture_date || e.expiry_date ? (
+                        <span className="text-xs">
+                          {e.manufacture_date ? new Date(e.manufacture_date).toLocaleDateString() : '-'}
+                          {' / '}
+                          {e.expiry_date ? (
+                            <span className={new Date(e.expiry_date) < new Date() ? 'text-red-600 font-medium' : ''}>
+                              {new Date(e.expiry_date).toLocaleDateString()}
+                            </span>
+                          ) : '-'}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300">-</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-sm">
+                      <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-semibold">
+                        +{e.quantity}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : (
+        /* Batch Summary Tab */
+        batches.length === 0 ? (
+          <p className="text-gray-500">No batches found.</p>
+        ) : (
+          <div className="overflow-x-auto bg-white rounded-lg shadow">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch Number</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Received</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Remaining</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">First Received</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {batches.map((b) => (
+                  <tr key={b.id} className={`hover:bg-gray-50 ${b.quantity_remaining === 0 ? 'bg-gray-50 text-gray-400' : ''}`}>
+                    <td className="px-5 py-3 text-sm font-medium">{b.batch_number || <span className="text-gray-400">No Batch</span>}</td>
+                    <td className="px-5 py-3 text-sm">{b.product_name}</td>
+                    <td className="px-5 py-3 text-sm">{b.quantity_received}</td>
+                    <td className="px-5 py-3 text-sm">
+                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
+                        b.quantity_remaining === 0 ? 'bg-gray-100 text-gray-400' :
+                        b.quantity_remaining < 50 ? 'bg-red-100 text-red-700' :
+                        'bg-green-100 text-green-700'
+                      }`}>
+                        {b.quantity_remaining}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-sm">
+                      {new Date(b.received_date).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
       )}
     </div>
   );

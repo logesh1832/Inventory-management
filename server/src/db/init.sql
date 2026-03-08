@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS customers (
 CREATE TABLE IF NOT EXISTS inventory_batches (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     product_id UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
-    batch_number VARCHAR(100) NOT NULL UNIQUE,
+    batch_number VARCHAR(100),
     quantity_received INTEGER NOT NULL DEFAULT 0,
     quantity_remaining INTEGER NOT NULL DEFAULT 0,
     received_date DATE NOT NULL DEFAULT CURRENT_DATE,

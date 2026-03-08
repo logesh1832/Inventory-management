@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../services/api';
+import SearchableSelect from '../components/SearchableSelect';
 
 export default function StockMovements() {
   const [movements, setMovements] = useState([]);
@@ -34,8 +35,7 @@ export default function StockMovements() {
     fetchMovements('', '');
   }, []);
 
-  const handleProductFilter = (e) => {
-    const val = e.target.value;
+  const handleProductFilter = (val) => {
     setFilterProductId(val);
     fetchMovements(val, filterType);
   };
@@ -61,20 +61,14 @@ export default function StockMovements() {
       <h2 className="text-2xl font-bold text-gray-800 mb-6">Stock Movements</h2>
 
       <div className="flex gap-4 mb-4">
-        <div>
+        <div className="w-56">
           <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
-          <select
+          <SearchableSelect
+            options={products.map((p) => ({ value: p.id, label: p.product_name, sublabel: p.product_code }))}
             value={filterProductId}
             onChange={handleProductFilter}
-            className="border border-gray-300 rounded px-3 py-2 w-56"
-          >
-            <option value="">All Products</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.product_name}
-              </option>
-            ))}
-          </select>
+            placeholder="All Products"
+          />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Movement Type</label>

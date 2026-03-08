@@ -20,11 +20,19 @@ const createCustomer = async (req, res, next) => {
       return res.status(400).json({ error: 'Phone must be 7-15 digits' });
     }
 
+    const created_by = req.user ? req.user.id : null;
+
     const result = await pool.query(
-      `INSERT INTO customers (customer_name, address, phone, email)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO customers (customer_name, address, phone, email, created_by)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [customer_name.trim(), address?.trim() || null, phone?.trim() || null, email?.trim() || null]
+      [
+        customer_name.trim(),
+        address?.trim() || null,
+        phone?.trim() || null,
+        email?.trim() || null,
+        created_by,
+      ]
     );
 
     res.status(201).json(result.rows[0]);
@@ -37,15 +45,20 @@ const createCustomer = async (req, res, next) => {
 const getAllCustomers = async (req, res, next) => {
   try {
     const { search } = req.query;
-    let query = 'SELECT * FROM customers';
     const params = [];
+    let conditions = [];
 
     if (search) {
-      query += ' WHERE customer_name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1';
       params.push(`%${search}%`);
+      const idx = params.length;
+      conditions.push(`(c.customer_name ILIKE $${idx} OR c.email ILIKE $${idx} OR c.phone ILIKE $${idx})`);
     }
 
-    query += ' ORDER BY created_at DESC';
+    let query = `SELECT c.*, u.name as created_by_name FROM customers c LEFT JOIN users u ON c.created_by = u.id`;
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+    query += ' ORDER BY c.created_at DESC';
 
     const result = await pool.query(query, params);
     res.json(result.rows);
@@ -58,7 +71,10 @@ const getAllCustomers = async (req, res, next) => {
 const getCustomerById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('SELECT * FROM customers WHERE id = $1', [id]);
+    const result = await pool.query(
+      `SELECT c.*, u.name as created_by_name FROM customers c LEFT JOIN users u ON c.created_by = u.id WHERE c.id = $1`,
+      [id]
+    );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Customer not found' });
@@ -96,7 +112,13 @@ const updateCustomer = async (req, res, next) => {
            email = COALESCE($4, email)
        WHERE id = $5
        RETURNING *`,
-      [customer_name?.trim(), address?.trim(), phone?.trim(), email?.trim(), id]
+      [
+        customer_name?.trim(),
+        address?.trim(),
+        phone?.trim(),
+        email?.trim(),
+        id,
+      ]
     );
 
     if (result.rows.length === 0) {

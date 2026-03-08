@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
+import SearchableSelect from '../components/SearchableSelect';
 
-const UNIT_OPTIONS = ['Pieces', 'Kg', 'Liters', 'Meters', 'Boxes'];
+const UNIT_OPTIONS = ['Pieces', 'Kg', 'Liters', 'Meters', 'Boxes', 'Rolls'];
 const STATUS_OPTIONS = ['active', 'inactive'];
 
 export default function ProductForm() {
@@ -15,11 +16,21 @@ export default function ProductForm() {
     product_code: '',
     unit: 'Pieces',
     status: 'active',
+    unit_price: '',
+    category: '',
+    batch_tracking: false,
   });
+  const [categoryOptions, setCategoryOptions] = useState([]);
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(isEdit);
+
+  useEffect(() => {
+    api.get('/categories?active=true')
+      .then(({ data }) => setCategoryOptions(data.map((c) => c.category_name)))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (isEdit) {
@@ -30,6 +41,9 @@ export default function ProductForm() {
             product_code: data.product_code,
             unit: data.unit,
             status: data.status,
+            unit_price: data.unit_price || '',
+            category: data.category || '',
+            batch_tracking: data.batch_tracking || false,
           });
         })
         .catch(() => showToast('Failed to load product', 'error'))
@@ -47,6 +61,9 @@ export default function ProductForm() {
     if (!form.product_name.trim()) newErrors.product_name = 'Product name is required';
     if (!form.product_code.trim()) newErrors.product_code = 'Product code is required';
     if (!form.unit) newErrors.unit = 'Unit is required';
+    if (form.unit_price !== '' && (isNaN(form.unit_price) || Number(form.unit_price) < 0)) {
+      newErrors.unit_price = 'Price must be a positive number';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -65,14 +82,20 @@ export default function ProductForm() {
 
     setSubmitting(true);
     try {
+      const payload = {
+        product_name: form.product_name,
+        product_code: form.product_code,
+        unit: form.unit,
+        unit_price: form.unit_price ? Number(form.unit_price) : 0,
+        category: form.category || null,
+        batch_tracking: form.batch_tracking,
+      };
+
       if (isEdit) {
-        await api.put(`/products/${id}`, {
-          product_name: form.product_name,
-          unit: form.unit,
-          status: form.status,
-        });
+        payload.status = form.status;
+        await api.put(`/products/${id}`, payload);
       } else {
-        await api.post('/products', form);
+        await api.post('/products', payload);
       }
       navigate('/products');
     } catch (err) {
@@ -89,13 +112,8 @@ export default function ProductForm() {
 
   return (
     <div>
-      {/* Toast */}
       {toast && (
-        <div
-          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded shadow-lg text-white ${
-            toast.type === 'error' ? 'bg-red-500' : 'bg-green-500'
-          }`}
-        >
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded shadow-lg text-white ${toast.type === 'error' ? 'bg-red-500' : 'bg-green-500'}`}>
           {toast.message}
         </div>
       )}
@@ -115,13 +133,9 @@ export default function ProductForm() {
             name="product_name"
             value={form.product_name}
             onChange={handleChange}
-            className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 ${
-              errors.product_name ? 'border-red-500' : 'border-gray-300'
-            }`}
+            className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 ${errors.product_name ? 'border-red-500' : 'border-gray-300'}`}
           />
-          {errors.product_name && (
-            <p className="text-red-500 text-xs mt-1">{errors.product_name}</p>
-          )}
+          {errors.product_name && <p className="text-red-500 text-xs mt-1">{errors.product_name}</p>}
         </div>
 
         {/* Product Code */}
@@ -135,16 +149,37 @@ export default function ProductForm() {
             value={form.product_code}
             onChange={handleChange}
             disabled={isEdit}
-            className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 ${
-              isEdit ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''
-            } ${errors.product_code ? 'border-red-500' : 'border-gray-300'}`}
+            className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 ${isEdit ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''} ${errors.product_code ? 'border-red-500' : 'border-gray-300'}`}
           />
-          {errors.product_code && (
-            <p className="text-red-500 text-xs mt-1">{errors.product_code}</p>
-          )}
-          {isEdit && (
-            <p className="text-gray-400 text-xs mt-1">Product code cannot be changed</p>
-          )}
+          {errors.product_code && <p className="text-red-500 text-xs mt-1">{errors.product_code}</p>}
+          {isEdit && <p className="text-gray-400 text-xs mt-1">Product code cannot be changed</p>}
+        </div>
+
+        {/* Category */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+          <SearchableSelect
+            options={categoryOptions.map((c) => ({ value: c, label: c }))}
+            value={form.category}
+            onChange={(val) => setForm((prev) => ({ ...prev, category: val }))}
+            placeholder="Select Category"
+          />
+        </div>
+
+        {/* Unit Price */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Unit Price (Rs.)</label>
+          <input
+            type="number"
+            name="unit_price"
+            value={form.unit_price}
+            onChange={handleChange}
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 ${errors.unit_price ? 'border-red-500' : 'border-gray-300'}`}
+          />
+          {errors.unit_price && <p className="text-red-500 text-xs mt-1">{errors.unit_price}</p>}
         </div>
 
         {/* Unit */}
@@ -156,14 +191,40 @@ export default function ProductForm() {
             name="unit"
             value={form.unit}
             onChange={handleChange}
-            className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 ${
-              errors.unit ? 'border-red-500' : 'border-gray-300'
-            }`}
+            className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 ${errors.unit ? 'border-red-500' : 'border-gray-300'}`}
           >
             {UNIT_OPTIONS.map((u) => (
               <option key={u} value={u}>{u}</option>
             ))}
           </select>
+        </div>
+
+        {/* Batch Tracking Toggle */}
+        <div className="mb-4 border-t border-gray-100 pt-4">
+          <div
+            className="flex items-center gap-4 cursor-pointer"
+            onClick={() => setForm((prev) => ({ ...prev, batch_tracking: !prev.batch_tracking }))}
+          >
+            <div
+              className="relative flex-shrink-0"
+              style={{ width: 44, height: 24, borderRadius: 12, backgroundColor: form.batch_tracking ? '#EAB308' : '#D1D5DB', transition: 'background-color 0.2s' }}
+            >
+              <div
+                style={{
+                  width: 20, height: 20, borderRadius: 10,
+                  backgroundColor: '#fff',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                  position: 'absolute', top: 2,
+                  left: form.batch_tracking ? 22 : 2,
+                  transition: 'left 0.2s',
+                }}
+              />
+            </div>
+            <div>
+              <span className="text-sm font-medium text-gray-700">Batch Tracking</span>
+              <p className="text-xs text-gray-400">Enable to track manufacture date, expiry date, and batch numbers</p>
+            </div>
+          </div>
         </div>
 
         {/* Status (edit only) */}
