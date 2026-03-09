@@ -20,6 +20,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - coolify
 
   server:
     build:
@@ -36,6 +38,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      coolify:
+        aliases:
+          - backend
 
   client:
     build:
@@ -47,6 +53,14 @@ services:
       - "8080:80"
     depends_on:
       - server
+    networks:
+      coolify:
+        aliases:
+          - frontend
 
 volumes:
   postgres_data:
+
+networks:
+  coolify:
+    external: true
