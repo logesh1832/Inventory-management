@@ -132,7 +132,7 @@ export default function Dashboard() {
 
       {/* Product Stock Summary */}
       <div className="bg-white rounded-lg shadow">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between gap-4">
+        <div className="px-5 py-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h3 className="text-lg font-semibold text-gray-800 flex-shrink-0">Product Stock Summary</h3>
           <div className="flex items-center gap-4">
             <input
@@ -140,7 +140,7 @@ export default function Dashboard() {
               placeholder="Search product..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="border border-gray-300 rounded px-3 py-1.5 text-sm w-56 focus:outline-none focus:ring-1 focus:ring-yellow-500"
+              className="border border-gray-300 rounded px-3 py-1.5 text-sm w-full sm:w-56 focus:outline-none focus:ring-1 focus:ring-yellow-500"
             />
             <Link to="/stock-report" className="text-sm text-yellow-600 hover:underline flex-shrink-0">Full Report</Link>
           </div>

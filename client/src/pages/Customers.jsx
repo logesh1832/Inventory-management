@@ -98,11 +98,11 @@ export default function Customers() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h2 className="text-2xl font-bold text-gray-800">Customers</h2>
         <Link
           to="/customers/new"
-          className="px-4 py-2 bg-yellow-500 text-gray-900 rounded hover:bg-yellow-600 transition-colors"
+          className="px-4 py-2 bg-yellow-500 text-gray-900 rounded hover:bg-yellow-600 transition-colors text-center"
         >
           + New Customer
         </Link>
@@ -125,43 +125,70 @@ export default function Customers() {
           {search ? 'No customers match your search.' : 'No customers found. Add your first customer!'}
         </p>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
-                <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {customers.map((customer) => (
-                <tr key={customer.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm text-gray-900">{customer.customer_name}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{customer.phone || '-'}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{customer.email || '-'}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{customer.address || '-'}</td>
-                  <td className="px-6 py-4 text-right">
-                    <Link
-                      to={`/customers/${customer.id}/edit`}
-                      className="text-yellow-600 hover:text-yellow-700 text-sm mr-4"
-                    >
-                      Edit
-                    </Link>
-                    <button
-                      onClick={() => setDeleteConfirm(customer)}
-                      className="text-red-500 hover:text-red-700 text-sm"
-                    >
-                      Delete
-                    </button>
-                  </td>
+        <>
+          {/* Mobile cards */}
+          <div className="md:hidden space-y-3">
+            {customers.map((customer) => (
+              <div key={customer.id} className="bg-white rounded-lg shadow p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-gray-900">{customer.customer_name}</span>
+                </div>
+                <div className="text-sm text-gray-500">
+                  <span className="text-gray-400">Phone:</span> {customer.phone || '-'}
+                </div>
+                <div className="text-sm text-gray-500">
+                  <span className="text-gray-400">Email:</span> {customer.email || '-'}
+                </div>
+                <div className="text-sm text-gray-500">
+                  <span className="text-gray-400">Address:</span> {customer.address || '-'}
+                </div>
+                <div className="flex items-center gap-4 pt-2 border-t border-gray-100">
+                  <Link to={`/customers/${customer.id}/edit`} className="text-yellow-600 hover:text-yellow-700 text-sm">Edit</Link>
+                  <button onClick={() => setDeleteConfirm(customer)} className="text-red-500 hover:text-red-700 text-sm">Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
+                  <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {customers.map((customer) => (
+                  <tr key={customer.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 text-sm text-gray-900">{customer.customer_name}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">{customer.phone || '-'}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">{customer.email || '-'}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">{customer.address || '-'}</td>
+                    <td className="px-6 py-4 text-right">
+                      <Link
+                        to={`/customers/${customer.id}/edit`}
+                        className="text-yellow-600 hover:text-yellow-700 text-sm mr-4"
+                      >
+                        Edit
+                      </Link>
+                      <button
+                        onClick={() => setDeleteConfirm(customer)}
+                        className="text-red-500 hover:text-red-700 text-sm"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );

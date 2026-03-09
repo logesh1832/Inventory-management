@@ -16,6 +16,7 @@ const allNavItems = [
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const { user, logout } = useAuth();
 
   const navItems = allNavItems.filter(
@@ -24,9 +25,24 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen bg-gray-100">
+      {/* Mobile backdrop */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <aside
-        className={`${collapsed ? 'w-16' : 'w-64'} text-white flex flex-col transition-all duration-300`}
+        className={`
+          ${collapsed ? 'md:w-16' : 'md:w-64'}
+          fixed inset-y-0 left-0 z-50 w-64
+          transform transition-transform duration-300 md:transition-all md:duration-300
+          ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
+          md:translate-x-0 md:relative md:flex
+          text-white flex flex-col
+        `}
         style={{ backgroundColor: '#2057A5' }}
       >
         {/* Header */}
@@ -51,10 +67,10 @@ export default function Layout() {
           </div>
         )}
 
-        {/* Toggle Button */}
+        {/* Toggle Button (desktop only) */}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="mx-auto my-2 p-1.5 rounded hover:bg-white/15 text-blue-200 hover:text-white transition-colors"
+          className="hidden md:block mx-auto my-2 p-1.5 rounded hover:bg-white/15 text-blue-200 hover:text-white transition-colors"
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -73,6 +89,7 @@ export default function Layout() {
               key={item.to}
               to={item.to}
               end={item.to === '/'}
+              onClick={() => setMobileOpen(false)}
               title={collapsed ? item.label : undefined}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2 rounded transition-colors ${
@@ -119,13 +136,23 @@ export default function Layout() {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white shadow px-6 py-4 flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-gray-800">
+        <header className="bg-white shadow px-3 py-2 md:px-6 md:py-4 flex items-center justify-between gap-2">
+          {/* Hamburger button (mobile only) */}
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="md:hidden p-1.5 rounded text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+            aria-label="Open menu"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <h1 className="text-base md:text-xl font-semibold text-gray-800 truncate">
             Inventory & Stock Management
           </h1>
-          <span className="text-xs text-gray-400">Quality you can trust</span>
+          <span className="text-xs text-gray-400 hidden sm:inline">Quality you can trust</span>
         </header>
-        <main className="flex-1 overflow-auto p-6">
+        <main className="flex-1 overflow-auto p-3 md:p-6">
           <Outlet />
         </main>
       </div>

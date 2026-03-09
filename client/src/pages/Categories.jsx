@@ -138,7 +138,7 @@ export default function Categories() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h2 className="text-2xl font-bold text-gray-800">Categories</h2>
         {canModify && !showForm && (
           <button
@@ -206,44 +206,75 @@ export default function Categories() {
       {categories.length === 0 ? (
         <p className="text-gray-500">No categories found.</p>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+        <>
+          {/* Mobile cards */}
+          <div className="md:hidden space-y-3">
+            {categories.map((cat) => (
+              <div key={cat.id} className="bg-white rounded-lg shadow p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-gray-900">{cat.category_name}</span>
+                  <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
+                    cat.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {cat.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-500">
+                  <span className="text-gray-400">Description:</span> {cat.description || '-'}
+                </div>
                 {canModify && (
-                  <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  <div className="flex items-center gap-4 pt-2 border-t border-gray-100">
+                    <button onClick={() => handleEdit(cat)} className="text-yellow-600 hover:text-yellow-700 text-sm">Edit</button>
+                    <button onClick={() => handleToggleActive(cat)} className="text-blue-500 hover:text-blue-700 text-sm">
+                      {cat.is_active ? 'Deactivate' : 'Activate'}
+                    </button>
+                    <button onClick={() => setDeleteConfirm(cat)} className="text-red-500 hover:text-red-700 text-sm">Delete</button>
+                  </div>
                 )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {categories.map((cat) => (
-                <tr key={cat.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm text-gray-900 font-medium">{cat.category_name}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{cat.description || '-'}</td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
-                      cat.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                    }`}>
-                      {cat.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   {canModify && (
-                    <td className="px-6 py-4 text-right">
-                      <button onClick={() => handleEdit(cat)} className="text-yellow-600 hover:text-yellow-700 text-sm mr-4">Edit</button>
-                      <button onClick={() => handleToggleActive(cat)} className="text-blue-500 hover:text-blue-700 text-sm mr-4">
-                        {cat.is_active ? 'Deactivate' : 'Activate'}
-                      </button>
-                      <button onClick={() => setDeleteConfirm(cat)} className="text-red-500 hover:text-red-700 text-sm">Delete</button>
-                    </td>
+                    <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {categories.map((cat) => (
+                  <tr key={cat.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 text-sm text-gray-900 font-medium">{cat.category_name}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">{cat.description || '-'}</td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
+                        cat.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {cat.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    {canModify && (
+                      <td className="px-6 py-4 text-right">
+                        <button onClick={() => handleEdit(cat)} className="text-yellow-600 hover:text-yellow-700 text-sm mr-4">Edit</button>
+                        <button onClick={() => handleToggleActive(cat)} className="text-blue-500 hover:text-blue-700 text-sm mr-4">
+                          {cat.is_active ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <button onClick={() => setDeleteConfirm(cat)} className="text-red-500 hover:text-red-700 text-sm">Delete</button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );

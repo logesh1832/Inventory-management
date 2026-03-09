@@ -239,7 +239,7 @@ export default function OrderForm() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h2 className="text-2xl font-bold text-gray-800">Create New Order</h2>
         <button onClick={() => navigate('/orders')} className="text-sm text-gray-500 hover:text-gray-700">
           &larr; Back to Orders
@@ -315,8 +315,8 @@ export default function OrderForm() {
                   </div>
 
                   {/* Product + Quantity */}
-                  <div className="grid grid-cols-12 gap-3 mb-3">
-                    <div className="col-span-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 mb-3">
+                    <div className="sm:col-span-8">
                       <label className="block text-xs font-medium text-gray-500 mb-1">Product <span className="text-red-500">*</span></label>
                       <SearchableSelect
                         options={products.map((p) => ({ value: p.id, label: `${p.product_name} (${p.product_code})` }))}
@@ -330,7 +330,7 @@ export default function OrderForm() {
                         </p>
                       )}
                     </div>
-                    <div className="col-span-4">
+                    <div className="sm:col-span-4">
                       <label className="block text-xs font-medium text-gray-500 mb-1">Quantity <span className="text-red-500">*</span></label>
                       <input
                         type="number"
@@ -379,7 +379,7 @@ export default function OrderForm() {
                           const isExpired = selectedBatch?.expiry_date && new Date(selectedBatch.expiry_date) < new Date();
 
                           return (
-                            <div key={alloc.id} className="flex items-start gap-2">
+                            <div key={alloc.id} className="flex flex-col sm:flex-row sm:items-start gap-2">
                               <div className="flex-1">
                                 <SearchableSelect
                                   options={available.map((b) => ({
@@ -436,7 +436,7 @@ export default function OrderForm() {
         </div>
 
         {/* Actions */}
-        <div className="bg-white rounded-lg shadow p-5 flex items-center justify-between">
+        <div className="bg-white rounded-lg shadow p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="text-sm text-gray-500">
             <span className="font-medium text-gray-700">{items.length}</span> item{items.length > 1 ? 's' : ''} &middot;{' '}
             <span className="font-medium text-gray-700">

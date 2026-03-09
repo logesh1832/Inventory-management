@@ -39,11 +39,11 @@ export default function Batches() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h2 className="text-2xl font-bold text-gray-800">Batches & Stock</h2>
         <Link
           to="/batches/new"
-          className="bg-yellow-500 text-gray-900 px-4 py-2 rounded hover:bg-yellow-600 transition-colors font-semibold text-sm"
+          className="bg-yellow-500 text-gray-900 px-4 py-2 rounded hover:bg-yellow-600 transition-colors font-semibold text-sm text-center"
         >
           + Stock Entry
         </Link>
@@ -71,7 +71,7 @@ export default function Batches() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4">
-        <div className="w-56">
+        <div className="w-full sm:w-56">
           <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
           <SearchableSelect
             options={products.map((p) => ({ value: p.id, label: p.product_name, sublabel: p.product_code }))}
@@ -81,7 +81,7 @@ export default function Batches() {
           />
         </div>
         {tab === 'entries' && (
-          <div className="w-56">
+          <div className="w-full sm:w-56">
             <label className="block text-xs font-medium text-gray-500 mb-1">Supplier</label>
             <SearchableSelect
               options={suppliers.map((s) => ({ value: s.id, label: s.customer_name }))}
@@ -100,7 +100,39 @@ export default function Batches() {
         entries.length === 0 ? (
           <p className="text-gray-500">No stock entries found.</p>
         ) : (
-          <div className="overflow-x-auto bg-white rounded-lg shadow">
+          {/* Mobile cards - entries */}
+          <div className="md:hidden space-y-3">
+            {entries.map((e) => (
+              <div key={e.id} className="bg-white rounded-lg shadow p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-gray-900">{e.product_name}</span>
+                  <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-semibold">
+                    +{e.quantity}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-500">
+                  <span className="text-gray-400">Date:</span>{' '}
+                  {e.received_date
+                    ? new Date(e.received_date).toLocaleDateString()
+                    : new Date(e.created_at).toLocaleDateString()}
+                </div>
+                <div className="text-sm text-gray-500">
+                  <span className="text-gray-400">Supplier:</span> {e.supplier_name || '-'}
+                </div>
+                <div className="text-sm text-gray-500">
+                  <span className="text-gray-400">Batch:</span>{' '}
+                  {e.batch_number ? (
+                    <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">{e.batch_number}</span>
+                  ) : (
+                    <span className="text-gray-400">No Batch</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table - entries */}
+          <div className="hidden md:block overflow-x-auto bg-white rounded-lg shadow">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -165,7 +197,37 @@ export default function Batches() {
         batches.length === 0 ? (
           <p className="text-gray-500">No batches found.</p>
         ) : (
-          <div className="overflow-x-auto bg-white rounded-lg shadow">
+          {/* Mobile cards - batch summary */}
+          <div className="md:hidden space-y-3">
+            {batches.map((b) => (
+              <div key={b.id} className={`bg-white rounded-lg shadow p-4 space-y-2 ${b.quantity_remaining === 0 ? 'opacity-60' : ''}`}>
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-gray-900">
+                    {b.batch_number || <span className="text-gray-400">No Batch</span>}
+                  </span>
+                  <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
+                    b.quantity_remaining === 0 ? 'bg-gray-100 text-gray-400' :
+                    b.quantity_remaining < 50 ? 'bg-red-100 text-red-700' :
+                    'bg-green-100 text-green-700'
+                  }`}>
+                    {b.quantity_remaining} remaining
+                  </span>
+                </div>
+                <div className="text-sm text-gray-500">
+                  <span className="text-gray-400">Product:</span> {b.product_name}
+                </div>
+                <div className="text-sm text-gray-500">
+                  <span className="text-gray-400">Received:</span> {b.quantity_received}
+                </div>
+                <div className="text-sm text-gray-500">
+                  <span className="text-gray-400">First Received:</span> {new Date(b.received_date).toLocaleDateString()}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table - batch summary */}
+          <div className="hidden md:block overflow-x-auto bg-white rounded-lg shadow">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>

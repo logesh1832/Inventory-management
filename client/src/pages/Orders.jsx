@@ -60,11 +60,11 @@ export default function Orders() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h2 className="text-2xl font-bold text-gray-800">Orders</h2>
         <Link
           to="/orders/new"
-          className="bg-yellow-500 text-gray-900 px-4 py-2 rounded hover:bg-yellow-600 transition-colors"
+          className="bg-yellow-500 text-gray-900 px-4 py-2 rounded hover:bg-yellow-600 transition-colors text-center"
         >
           Create New Order
         </Link>
@@ -120,7 +120,38 @@ export default function Orders() {
       ) : orders.length === 0 ? (
         <p className="text-gray-500">No orders found.</p>
       ) : (
-        <div className="overflow-x-auto bg-white rounded shadow">
+        {/* Mobile cards */}
+        <div className="md:hidden space-y-3">
+          {orders.map((o) => (
+            <div
+              key={o.id}
+              onClick={() => navigate(`/orders/${o.id}`)}
+              className="bg-white rounded-lg shadow p-4 space-y-2 cursor-pointer active:bg-gray-50"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-gray-900">{o.invoice_number}</span>
+                <span
+                  className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                    o.status === 'completed'
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-yellow-100 text-yellow-800'
+                  }`}
+                >
+                  {o.status}
+                </span>
+              </div>
+              <div className="text-sm text-gray-500">
+                <span className="text-gray-400">Customer:</span> {o.customer_name}
+              </div>
+              <div className="text-sm text-gray-500">
+                <span className="text-gray-400">Date:</span> {new Date(o.order_date).toLocaleDateString()}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden md:block overflow-x-auto bg-white rounded shadow">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>

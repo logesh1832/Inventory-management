@@ -42,7 +42,7 @@ export default function OrderDetail() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-6 no-print">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 no-print">
         <h2 className="text-2xl font-bold text-gray-800">Order Detail</h2>
         <div className="flex gap-3">
           <button
@@ -60,7 +60,7 @@ export default function OrderDetail() {
         </div>
       </div>
 
-      <div className="bg-white rounded shadow p-6 space-y-6 print-area">
+      <div className="bg-white rounded shadow p-4 sm:p-6 space-y-6 print-area">
         {/* Print Header — only visible when printing */}
         <div className="print-only items-center justify-between border-b pb-4">
           <div className="flex items-center gap-3">
@@ -77,7 +77,7 @@ export default function OrderDetail() {
         </div>
 
         {/* Invoice Header */}
-        <div className="flex justify-between items-start border-b pb-4">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 border-b pb-4">
           <div>
             <h3 className="text-xl font-bold text-gray-800">{order.invoice_number}</h3>
             <p className="text-sm text-gray-500 mt-1">
@@ -107,7 +107,8 @@ export default function OrderDetail() {
         {/* Items Table */}
         <div>
           <h4 className="text-sm font-medium text-gray-500 uppercase mb-2">Items</h4>
-          <div className="overflow-x-auto">
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -142,6 +143,30 @@ export default function OrderDetail() {
                   ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="md:hidden divide-y divide-gray-200">
+            {order.items.map((item, index) => (
+              <div key={item.id} className="p-3 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">#{index + 1}</span>
+                  <span className="text-sm font-semibold">{item.quantity} qty</span>
+                </div>
+                <p className="text-sm font-medium text-gray-800">{item.product_name}</p>
+                <p className="text-xs text-gray-500">{item.product_code}</p>
+                {item.deductions && item.deductions.length > 0 && (
+                  <div className="pt-1 space-y-0.5">
+                    <p className="text-xs font-medium text-gray-500">Batch Breakdown:</p>
+                    {item.deductions.map((d, i) => (
+                      <p key={i} className="text-xs text-gray-600">
+                        {d.batch_number ? `${d.batch_number}: ${d.quantity}` : `Stock: ${d.quantity}`}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
 

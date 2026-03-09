@@ -149,7 +149,7 @@ export default function BatchForm() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h2 className="text-2xl font-bold text-gray-800">Stock Entry</h2>
         <button onClick={() => navigate('/batches')} className="text-sm text-gray-500 hover:text-gray-700">
           &larr; Back to Batches
@@ -222,8 +222,8 @@ export default function BatchForm() {
                 </div>
 
                 {/* Row 1: Product + Quantity */}
-                <div className="grid grid-cols-12 gap-3 mb-3">
-                  <div className="col-span-8">
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 mb-3">
+                  <div className="sm:col-span-8">
                     <label className="block text-xs font-medium text-gray-500 mb-1">Product <span className="text-red-500">*</span></label>
                     <SearchableSelect
                       options={products.map((p) => ({ value: p.id, label: `${p.product_name} (${p.product_code})${p.batch_tracking ? ' [BT]' : ''}` }))}
@@ -232,7 +232,7 @@ export default function BatchForm() {
                       placeholder="Select product..."
                     />
                   </div>
-                  <div className="col-span-4">
+                  <div className="sm:col-span-4">
                     <label className="block text-xs font-medium text-gray-500 mb-1">Quantity <span className="text-red-500">*</span></label>
                     <input
                       type="number"
@@ -249,7 +249,7 @@ export default function BatchForm() {
                 {row.batch_tracking && (
                 <div className="mb-3">
                   <label className="block text-xs font-medium text-gray-500 mb-1">Batch</label>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <div className="flex bg-gray-100 rounded text-xs overflow-hidden flex-shrink-0">
                       <button
                         type="button"
@@ -327,7 +327,7 @@ export default function BatchForm() {
         </div>
 
         {/* Summary + Actions */}
-        <div className="bg-white rounded-lg shadow p-5 flex items-center justify-between">
+        <div className="bg-white rounded-lg shadow p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="text-sm text-gray-500">
             <span className="font-medium text-gray-700">{rows.length}</span> item{rows.length > 1 ? 's' : ''} &middot;{' '}
             <span className="font-medium text-gray-700">

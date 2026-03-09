@@ -90,10 +90,10 @@ export default function Products() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h2 className="text-2xl font-bold text-gray-800">{isSalesperson ? 'Product Catalog' : 'Products'}</h2>
         {!isSalesperson && (
-          <Link to="/products/new" className="px-4 py-2 bg-yellow-500 text-gray-900 rounded hover:bg-yellow-600 transition-colors">
+          <Link to="/products/new" className="px-4 py-2 bg-yellow-500 text-gray-900 rounded hover:bg-yellow-600 transition-colors text-center">
             + New Product
           </Link>
         )}
@@ -106,9 +106,9 @@ export default function Products() {
           placeholder="Search by name or code..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 w-64"
+          className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 w-full sm:w-64"
         />
-        <div className="w-56">
+        <div className="w-full sm:w-56">
           <SearchableSelect
             options={categories.map((c) => ({ value: c, label: c }))}
             value={categoryFilter}
@@ -122,76 +122,132 @@ export default function Products() {
       {filtered.length === 0 ? (
         <p className="text-gray-500">No products found.</p>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Product Name</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
-                {!isSalesperson && (
-                  <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
-                )}
-                <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Unit</th>
-                {!isSalesperson && (
-                  <>
-                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </>
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filtered.map((product) => (
-                <tr key={product.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm text-gray-900">
+        <>
+          {/* Mobile cards */}
+          <div className="md:hidden space-y-3">
+            {filtered.map((product) => (
+              <div key={product.id} className="bg-white rounded-lg shadow p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-gray-900">
                     {product.product_name}
                     {product.batch_tracking && (
                       <span className="ml-2 inline-block px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-50 text-blue-600">BT</span>
                     )}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500 font-mono">{product.product_code}</td>
-                  <td className="px-6 py-4 text-sm">
-                    {product.category ? (
-                      <span className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
-                        {product.category}
-                      </span>
-                    ) : '-'}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900 text-right font-medium">{formatPrice(product.unit_price)}</td>
+                  </span>
                   {!isSalesperson && (
-                    <td className="px-6 py-4 text-right">
-                      <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
-                        product.available_stock > 200 ? 'bg-green-100 text-green-700' :
-                        product.available_stock >= 50 ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
-                        {product.available_stock}
-                      </span>
-                    </td>
+                    <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
+                      product.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {product.status}
+                    </span>
                   )}
-                  <td className="px-6 py-4 text-sm text-gray-500">{product.unit}</td>
+                </div>
+                <div className="text-sm text-gray-500">
+                  <span className="text-gray-400">Code:</span> <span className="font-mono">{product.product_code}</span>
+                </div>
+                <div className="text-sm text-gray-500">
+                  <span className="text-gray-400">Category:</span>{' '}
+                  {product.category ? (
+                    <span className="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700">{product.category}</span>
+                  ) : '-'}
+                </div>
+                <div className="text-sm text-gray-500">
+                  <span className="text-gray-400">Price:</span> <span className="font-medium text-gray-900">{formatPrice(product.unit_price)}</span>
+                </div>
+                {!isSalesperson && (
+                  <div className="text-sm text-gray-500">
+                    <span className="text-gray-400">Stock:</span>{' '}
+                    <span className={`inline-block px-2 py-0.5 text-xs font-semibold rounded-full ${
+                      product.available_stock > 200 ? 'bg-green-100 text-green-700' :
+                      product.available_stock >= 50 ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {product.available_stock}
+                    </span>
+                  </div>
+                )}
+                {!isSalesperson && (
+                  <div className="flex items-center gap-4 pt-2 border-t border-gray-100">
+                    <Link to={`/products/${product.id}/edit`} className="text-yellow-600 hover:text-yellow-700 text-sm">Edit</Link>
+                    <button onClick={() => setDeleteConfirm(product)} className="text-red-500 hover:text-red-700 text-sm">Delete</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Product Name</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                  <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
+                  {!isSalesperson && (
+                    <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+                  )}
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Unit</th>
                   {!isSalesperson && (
                     <>
-                      <td className="px-6 py-4">
-                        <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
-                          product.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                        }`}>
-                          {product.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <Link to={`/products/${product.id}/edit`} className="text-yellow-600 hover:text-yellow-700 text-sm mr-4">Edit</Link>
-                        <button onClick={() => setDeleteConfirm(product)} className="text-red-500 hover:text-red-700 text-sm">Delete</button>
-                      </td>
+                      <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </>
                   )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filtered.map((product) => (
+                  <tr key={product.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 text-sm text-gray-900">
+                      {product.product_name}
+                      {product.batch_tracking && (
+                        <span className="ml-2 inline-block px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-50 text-blue-600">BT</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500 font-mono">{product.product_code}</td>
+                    <td className="px-6 py-4 text-sm">
+                      {product.category ? (
+                        <span className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
+                          {product.category}
+                        </span>
+                      ) : '-'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900 text-right font-medium">{formatPrice(product.unit_price)}</td>
+                    {!isSalesperson && (
+                      <td className="px-6 py-4 text-right">
+                        <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
+                          product.available_stock > 200 ? 'bg-green-100 text-green-700' :
+                          product.available_stock >= 50 ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {product.available_stock}
+                        </span>
+                      </td>
+                    )}
+                    <td className="px-6 py-4 text-sm text-gray-500">{product.unit}</td>
+                    {!isSalesperson && (
+                      <>
+                        <td className="px-6 py-4">
+                          <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
+                            product.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                          }`}>
+                            {product.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <Link to={`/products/${product.id}/edit`} className="text-yellow-600 hover:text-yellow-700 text-sm mr-4">Edit</Link>
+                          <button onClick={() => setDeleteConfirm(product)} className="text-red-500 hover:text-red-700 text-sm">Delete</button>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );

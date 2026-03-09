@@ -118,8 +118,40 @@ export default function UserManagement() {
         </select>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow overflow-x-auto">
+      {/* Mobile cards */}
+      <div className="md:hidden space-y-3">
+        {filtered.length === 0 ? (
+          <p className="text-center py-8 text-gray-400">No users found.</p>
+        ) : filtered.map((u) => (
+          <div key={u.id} className="bg-white rounded-lg shadow p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-gray-900">{u.name}</span>
+              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                {u.is_active ? 'Active' : 'Inactive'}
+              </span>
+            </div>
+            <div className="text-sm text-gray-500">
+              <span className="text-gray-400">Email:</span> {u.email}
+            </div>
+            <div className="text-sm text-gray-500">
+              <span className="text-gray-400">Role:</span>{' '}
+              <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium capitalize bg-blue-100 text-blue-700">{u.role}</span>
+            </div>
+            <div className="text-sm text-gray-500">
+              <span className="text-gray-400">Phone:</span> {u.phone || '-'}
+            </div>
+            <div className="flex items-center gap-4 pt-2 border-t border-gray-100">
+              <button onClick={() => openEditModal(u)} className="text-blue-600 hover:text-blue-800 text-sm font-medium">Edit</button>
+              <button onClick={() => toggleStatus(u)} className={`text-sm font-medium ${u.is_active ? 'text-red-600 hover:text-red-800' : 'text-green-600 hover:text-green-800'}`}>
+                {u.is_active ? 'Deactivate' : 'Activate'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block bg-white rounded-lg shadow overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b">
             <tr>
