@@ -5,10 +5,12 @@ const getStockMovements = async (req, res, next) => {
     const { product_id, movement_type, from_date, to_date } = req.query;
 
     let query = `
-      SELECT sm.*, p.product_name, ib.batch_number
+      SELECT sm.*, p.product_name, ib.batch_number,
+        CASE WHEN sm.reference_type = 'ORDER' THEN o.invoice_number ELSE NULL END AS invoice_number
       FROM stock_movements sm
       JOIN products p ON p.id = sm.product_id
       LEFT JOIN inventory_batches ib ON ib.id = sm.batch_id
+      LEFT JOIN orders o ON sm.reference_type = 'ORDER' AND o.id = sm.reference_id
     `;
     const conditions = [];
     const params = [];

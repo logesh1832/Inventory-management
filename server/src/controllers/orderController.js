@@ -249,6 +249,19 @@ const getOrderById = async (req, res, next) => {
       [id]
     );
 
+    // Merge order_items with the same product_id into single items
+    const mergedItems = [];
+    for (const item of itemsResult.rows) {
+      const existing = mergedItems.find((m) => m.product_id === item.product_id);
+      if (existing) {
+        existing.quantity += item.quantity;
+      } else {
+        mergedItems.push({ ...item, quantity: item.quantity });
+      }
+    }
+
+    // Build deductions from stock_movements, grouped by product_id
+    // Each movement is unique, so no deduplication needed
     const movementsByProduct = {};
     for (const m of movementsResult.rows) {
       if (!movementsByProduct[m.product_id]) {
@@ -261,7 +274,7 @@ const getOrderById = async (req, res, next) => {
       });
     }
 
-    const itemsWithDeductions = itemsResult.rows.map((item) => ({
+    const itemsWithDeductions = mergedItems.map((item) => ({
       ...item,
       deductions: movementsByProduct[item.product_id] || [],
     }));

@@ -120,26 +120,26 @@ export default function OrderDetail() {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {order.items.map((item, index) => (
-                  <tr key={item.id}>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm">{index + 1}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">{item.product_name}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.product_code}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm">{item.quantity}</td>
-                    <td className="px-4 py-3 text-sm">
-                      {item.deductions && item.deductions.length > 0 ? (
-                        <div className="space-y-1">
-                          {item.deductions.map((d, i) => (
-                            <div key={i} className="text-xs text-gray-600">
-                              {d.batch_number}: {d.quantity}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                    <tr key={item.id}>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">{index + 1}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">{item.product_name}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.product_code}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">{item.quantity}</td>
+                      <td className="px-4 py-3 text-sm">
+                        {item.deductions && item.deductions.length > 0 ? (
+                          <div className="space-y-1">
+                            {item.deductions.map((d, i) => (
+                              <div key={i} className="text-xs text-gray-600">
+                                {d.batch_number ? `${d.batch_number}: ${d.quantity}` : `Stock: ${d.quantity}`}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>

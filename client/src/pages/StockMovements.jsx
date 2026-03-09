@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
 
@@ -7,8 +8,10 @@ export default function StockMovements() {
   const [products, setProducts] = useState([]);
   const [filterProductId, setFilterProductId] = useState('');
   const [filterType, setFilterType] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const navigate = useNavigate();
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -60,7 +63,7 @@ export default function StockMovements() {
 
       <h2 className="text-2xl font-bold text-gray-800 mb-6">Stock Movements</h2>
 
-      <div className="flex gap-4 mb-4">
+      <div className="flex gap-4 mb-4 flex-wrap items-end">
         <div className="w-56">
           <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
           <SearchableSelect
@@ -82,13 +85,39 @@ export default function StockMovements() {
             <option value="OUT">OUT</option>
           </select>
         </div>
+        <div className="ml-auto w-64">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search by product, batch, invoice..."
+            className="border border-gray-300 rounded px-3 py-2 w-full"
+          />
+        </div>
       </div>
 
       {loading ? (
         <p className="text-gray-500">Loading...</p>
       ) : movements.length === 0 ? (
         <p className="text-gray-500">No stock movements found.</p>
-      ) : (
+      ) : (() => {
+        const term = searchTerm.toLowerCase().trim();
+        const filtered = term
+          ? movements.filter((m) => {
+              const date = new Date(m.created_at).toLocaleDateString().toLowerCase();
+              const product = (m.product_name || '').toLowerCase();
+              const batch = (m.batch_number || '').toLowerCase();
+              const qty = String(m.quantity);
+              const type = (m.movement_type || '').toLowerCase();
+              const invoice = (m.invoice_number || m.reference_type || '').toLowerCase();
+              return date.includes(term) || product.includes(term) || batch.includes(term) || qty.includes(term) || type.includes(term) || invoice.includes(term);
+            })
+          : movements;
+
+        return filtered.length === 0 ? (
+          <p className="text-gray-500">No matching movements found.</p>
+        ) : (
         <div className="overflow-x-auto bg-white rounded shadow">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -98,11 +127,11 @@ export default function StockMovements() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch #</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reference</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invoice / Reference</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {movements.map((m) => (
+              {filtered.map((m) => (
                 <tr key={m.id}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {new Date(m.created_at).toLocaleDateString()}
@@ -121,13 +150,25 @@ export default function StockMovements() {
                       {m.movement_type}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">{m.reference_type}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {m.reference_type === 'ORDER' && m.reference_id ? (
+                      <button
+                        onClick={() => navigate(`/orders/${m.reference_id}`)}
+                        className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                      >
+                        {m.invoice_number || `Order #${m.reference_id}`}
+                      </button>
+                    ) : (
+                      <span>{m.reference_type || '—'}</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
