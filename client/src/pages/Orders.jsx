@@ -120,6 +120,7 @@ export default function Orders() {
       ) : orders.length === 0 ? (
         <p className="text-gray-500">No orders found.</p>
       ) : (
+        <>
         {/* Mobile cards */}
         <div className="md:hidden space-y-3">
           {orders.map((o) => (
@@ -189,6 +190,7 @@ export default function Orders() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );
