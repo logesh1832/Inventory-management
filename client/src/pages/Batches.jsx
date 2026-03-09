@@ -100,6 +100,7 @@ export default function Batches() {
         entries.length === 0 ? (
           <p className="text-gray-500">No stock entries found.</p>
         ) : (
+          <>
           {/* Mobile cards - entries */}
           <div className="md:hidden space-y-3">
             {entries.map((e) => (
@@ -191,12 +192,14 @@ export default function Batches() {
               </tbody>
             </table>
           </div>
+          </>
         )
       ) : (
         /* Batch Summary Tab */
         batches.length === 0 ? (
           <p className="text-gray-500">No batches found.</p>
         ) : (
+          <>
           {/* Mobile cards - batch summary */}
           <div className="md:hidden space-y-3">
             {batches.map((b) => (
@@ -261,6 +264,7 @@ export default function Batches() {
               </tbody>
             </table>
           </div>
+          </>
         )
       )}
     </div>
