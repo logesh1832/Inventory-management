@@ -298,4 +298,179 @@ const getOrderById = async (req, res, next) => {
   }
 };
 
-module.exports = { createOrder, getAllOrders, getOrderById };
+// PUT /api/orders/:id — update an order (reverse old deductions, apply new)
+const updateOrder = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { customer_id, order_date, items } = req.body;
+
+    if (!customer_id) {
+      return res.status(400).json({ error: 'customer_id is required' });
+    }
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items must be a non-empty array' });
+    }
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (!item.product_id) {
+        return res.status(400).json({ error: `Row ${i + 1}: Product is required` });
+      }
+      if (!item.quantity || item.quantity <= 0) {
+        return res.status(400).json({ error: `Row ${i + 1}: Quantity must be greater than 0` });
+      }
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Check order exists
+      const orderCheck = await client.query('SELECT * FROM orders WHERE id = $1 FOR UPDATE', [id]);
+      if (orderCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Order not found' });
+      }
+
+      // 1. Reverse all existing stock deductions
+      const oldMovements = await client.query(
+        "SELECT * FROM stock_movements WHERE reference_type = 'ORDER' AND reference_id = $1 AND movement_type = 'OUT'",
+        [id]
+      );
+
+      for (const mov of oldMovements.rows) {
+        await client.query(
+          'UPDATE inventory_batches SET quantity_remaining = quantity_remaining + $1 WHERE id = $2',
+          [mov.quantity, mov.batch_id]
+        );
+      }
+
+      // 2. Delete old order items and stock movements
+      await client.query("DELETE FROM stock_movements WHERE reference_type = 'ORDER' AND reference_id = $1", [id]);
+      await client.query('DELETE FROM order_items WHERE order_id = $1', [id]);
+
+      // 3. Update order header
+      await client.query(
+        'UPDATE orders SET customer_id = $1, order_date = $2 WHERE id = $3',
+        [customer_id, order_date || new Date().toISOString().split('T')[0], id]
+      );
+
+      // 4. Re-create order items and deductions (same logic as createOrder)
+      const deductionDetails = [];
+
+      for (const item of items) {
+        const qty = Number(item.quantity);
+
+        await client.query(
+          'INSERT INTO order_items (order_id, product_id, quantity) VALUES ($1, $2, $3)',
+          [id, item.product_id, qty]
+        );
+
+        if (item.batch_id) {
+          const batchResult = await client.query(
+            `SELECT id, batch_number, quantity_remaining
+             FROM inventory_batches
+             WHERE id = $1 AND product_id = $2 AND quantity_remaining > 0
+             FOR UPDATE`,
+            [item.batch_id, item.product_id]
+          );
+
+          if (batchResult.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: `Batch not found or empty for product ${item.product_id}` });
+          }
+
+          const batch = batchResult.rows[0];
+          if (batch.quantity_remaining < qty) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({
+              error: `Insufficient stock in batch ${batch.batch_number}. Available: ${batch.quantity_remaining}, Requested: ${qty}`,
+            });
+          }
+
+          await client.query(
+            'UPDATE inventory_batches SET quantity_remaining = quantity_remaining - $1 WHERE id = $2',
+            [qty, batch.id]
+          );
+
+          await client.query(
+            `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id)
+             VALUES ($1, $2, $3, 'OUT', 'ORDER', $4)`,
+            [item.product_id, batch.id, qty, id]
+          );
+
+          deductionDetails.push({
+            product_id: item.product_id,
+            quantity: qty,
+            deductions: [{ batch_id: batch.id, batch_number: batch.batch_number, quantity_deducted: qty }],
+          });
+        } else {
+          const batchesResult = await client.query(
+            `SELECT id, batch_number, quantity_remaining
+             FROM inventory_batches
+             WHERE product_id = $1 AND quantity_remaining > 0
+             ORDER BY received_date ASC, created_at ASC
+             FOR UPDATE`,
+            [item.product_id]
+          );
+
+          const totalAvailable = batchesResult.rows.reduce((sum, b) => sum + b.quantity_remaining, 0);
+          if (totalAvailable < qty) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({
+              error: `Insufficient stock for product ${item.product_id}. Available: ${totalAvailable}, Requested: ${qty}`,
+            });
+          }
+
+          let remaining = qty;
+          const itemDeductions = [];
+
+          for (const batch of batchesResult.rows) {
+            if (remaining <= 0) break;
+
+            const deduct = Math.min(remaining, batch.quantity_remaining);
+
+            await client.query(
+              'UPDATE inventory_batches SET quantity_remaining = quantity_remaining - $1 WHERE id = $2',
+              [deduct, batch.id]
+            );
+
+            await client.query(
+              `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id)
+               VALUES ($1, $2, $3, 'OUT', 'ORDER', $4)`,
+              [item.product_id, batch.id, deduct, id]
+            );
+
+            itemDeductions.push({
+              batch_id: batch.id,
+              batch_number: batch.batch_number,
+              quantity_deducted: deduct,
+            });
+
+            remaining -= deduct;
+          }
+
+          deductionDetails.push({
+            product_id: item.product_id,
+            quantity: qty,
+            deductions: itemDeductions,
+          });
+        }
+      }
+
+      await client.query('COMMIT');
+
+      const updatedOrder = await pool.query('SELECT * FROM orders WHERE id = $1', [id]);
+      res.json({ order: updatedOrder.rows[0], items: deductionDetails });
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { createOrder, getAllOrders, getOrderById, updateOrder };

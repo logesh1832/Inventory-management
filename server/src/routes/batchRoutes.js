@@ -1,9 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { createBatch, createBulkBatches, getAllBatches, getStockEntries, getBatchById, getBatchesByProduct } = require('../controllers/batchController');
+const { createBatch, createBulkBatches, getAllBatches, getStockEntries, getStockEntryById, updateStockEntry, getBatchById, getBatchesByProduct } = require('../controllers/batchController');
 
 router.post('/bulk', createBulkBatches);
 router.post('/', createBatch);
+router.get('/stock-entries/:id', getStockEntryById);
+router.put('/stock-entries/:id', updateStockEntry);
 router.get('/stock-entries', getStockEntries);
 router.get('/', getAllBatches);
 router.get('/product/:product_id', getBatchesByProduct);

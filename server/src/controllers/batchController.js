@@ -292,4 +292,130 @@ const getBatchesByProduct = async (req, res, next) => {
   }
 };
 
-module.exports = { createBatch, createBulkBatches, getAllBatches, getStockEntries, getBatchById, getBatchesByProduct };
+// GET /api/batches/stock-entries/:id — get single stock entry for editing
+const getStockEntryById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      `SELECT sm.id, sm.quantity, sm.supplier_id,
+              COALESCE(sm.received_date, ib.received_date, sm.created_at::date) AS received_date,
+              sm.product_id, sm.batch_id,
+              p.product_name, p.product_code, p.batch_tracking,
+              ib.batch_number, ib.manufacture_date, ib.expiry_date,
+              c.customer_name AS supplier_name
+       FROM stock_movements sm
+       JOIN products p ON p.id = sm.product_id
+       LEFT JOIN inventory_batches ib ON ib.id = sm.batch_id
+       LEFT JOIN customers c ON c.id = sm.supplier_id
+       WHERE sm.id = $1 AND sm.movement_type = 'IN'`,
+      [id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Stock entry not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// PUT /api/batches/stock-entries/:id — update a stock entry
+const updateStockEntry = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { quantity, supplier_id, received_date, batch_number, manufacture_date, expiry_date, move_to_batch_id } = req.body;
+
+    if (!quantity || Number(quantity) <= 0) {
+      return res.status(400).json({ error: 'Quantity must be greater than 0' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const smResult = await client.query(
+        "SELECT * FROM stock_movements WHERE id = $1 AND movement_type = 'IN' FOR UPDATE",
+        [id]
+      );
+      if (smResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Stock entry not found' });
+      }
+      const sm = smResult.rows[0];
+      const oldQty = sm.quantity;
+      const newQty = Number(quantity);
+
+      if (move_to_batch_id && move_to_batch_id !== sm.batch_id) {
+        // Moving stock to a different batch
+        // 1. Remove quantity from old batch
+        await client.query(
+          'UPDATE inventory_batches SET quantity_received = quantity_received - $1, quantity_remaining = quantity_remaining - $1 WHERE id = $2',
+          [oldQty, sm.batch_id]
+        );
+
+        // Check old batch remaining doesn't go negative
+        const oldBatchCheck = await client.query('SELECT quantity_remaining FROM inventory_batches WHERE id = $1', [sm.batch_id]);
+        if (oldBatchCheck.rows[0].quantity_remaining < 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Cannot move: some stock from this batch has already been sold' });
+        }
+
+        // 2. Add quantity to new batch
+        await client.query(
+          'UPDATE inventory_batches SET quantity_received = quantity_received + $1, quantity_remaining = quantity_remaining + $1 WHERE id = $2',
+          [newQty, move_to_batch_id]
+        );
+
+        // 3. Update stock movement to point to new batch
+        await client.query(
+          'UPDATE stock_movements SET quantity = $1, supplier_id = $2, received_date = $3, batch_id = $4 WHERE id = $5',
+          [newQty, supplier_id || null, received_date || sm.received_date, move_to_batch_id, id]
+        );
+      } else {
+        // Same batch — adjust quantities if changed
+        const qtyDiff = newQty - oldQty;
+        if (qtyDiff !== 0) {
+          await client.query(
+            'UPDATE inventory_batches SET quantity_received = quantity_received + $1, quantity_remaining = quantity_remaining + $1 WHERE id = $2',
+            [qtyDiff, sm.batch_id]
+          );
+
+          const batchCheck = await client.query('SELECT quantity_remaining FROM inventory_batches WHERE id = $1', [sm.batch_id]);
+          if (batchCheck.rows[0].quantity_remaining < 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Cannot reduce quantity below what has already been sold' });
+          }
+        }
+
+        // Update batch details
+        if (batch_number !== undefined) {
+          await client.query(
+            'UPDATE inventory_batches SET batch_number = $1, manufacture_date = $2, expiry_date = $3, received_date = $4 WHERE id = $5',
+            [batch_number || null, manufacture_date || null, expiry_date || null, received_date || sm.received_date, sm.batch_id]
+          );
+        }
+
+        // Update stock movement
+        await client.query(
+          'UPDATE stock_movements SET quantity = $1, supplier_id = $2, received_date = $3 WHERE id = $4',
+          [newQty, supplier_id || null, received_date || sm.received_date, id]
+        );
+      }
+
+      await client.query('COMMIT');
+      res.json({ message: 'Stock entry updated successfully' });
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      if (txErr.code === '23505') {
+        return res.status(409).json({ error: 'Duplicate batch number for this product' });
+      }
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { createBatch, createBulkBatches, getAllBatches, getStockEntries, getStockEntryById, updateStockEntry, getBatchById, getBatchesByProduct };

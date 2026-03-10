@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
 
@@ -14,20 +14,28 @@ const emptyItem = () => ({
   product_id: '',
   quantity: '',
   batches: [],
-  allocations: [], // batch allocations for this item
+  allocations: [],
   useManualBatch: false,
 });
 
 export default function OrderForm() {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const isEdit = Boolean(id);
+
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
   const [customerId, setCustomerId] = useState('');
   const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
+  const [invoiceNumber, setInvoiceNumber] = useState('');
   const [items, setItems] = useState([emptyItem()]);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
+  const [loadingOrder, setLoadingOrder] = useState(isEdit);
+
+  // Store old deductions so we can adjust available batch quantities
+  const [oldDeductions, setOldDeductions] = useState([]);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -35,9 +43,97 @@ export default function OrderForm() {
   };
 
   useEffect(() => {
-    api.get('/customers').then((res) => setCustomers(res.data)).catch(() => {});
-    api.get('/products').then((res) => setProducts(res.data)).catch(() => {});
+    Promise.all([
+      api.get('/customers'),
+      api.get('/products'),
+    ]).then(([custRes, prodRes]) => {
+      setCustomers(custRes.data);
+      setProducts(prodRes.data);
+
+      // Load existing order if editing
+      if (isEdit) {
+        loadOrder(prodRes.data);
+      }
+    }).catch(() => {});
   }, []);
+
+  const loadOrder = async (productsList) => {
+    try {
+      const res = await api.get(`/orders/${id}`);
+      const order = res.data;
+
+      setCustomerId(order.customer_id);
+      setOrderDate(order.order_date ? order.order_date.split('T')[0] : '');
+      setInvoiceNumber(order.invoice_number);
+
+      // Collect all old deductions for batch availability adjustment
+      const allOldDeductions = [];
+      for (const item of order.items) {
+        if (item.deductions) {
+          for (const d of item.deductions) {
+            allOldDeductions.push({ ...d, product_id: item.product_id });
+          }
+        }
+      }
+      setOldDeductions(allOldDeductions);
+
+      // Build form items from order items
+      const formItems = [];
+      for (const item of order.items) {
+        const formItem = {
+          id: Date.now() + Math.random(),
+          product_id: item.product_id,
+          quantity: String(item.quantity),
+          batches: [],
+          allocations: [],
+          useManualBatch: false,
+        };
+
+        // Fetch batches for this product
+        try {
+          const { data: batchData } = await api.get(`/batches/product/${item.product_id}`);
+          const available = batchData.filter((b) => b.quantity_remaining > 0 || allOldDeductions.some((d) => d.batch_id === b.id));
+
+          // Adjust batch quantities: add back old deductions
+          const adjusted = available.map((b) => {
+            const oldQty = allOldDeductions
+              .filter((d) => d.batch_id === b.id)
+              .reduce((sum, d) => sum + d.quantity, 0);
+            return { ...b, quantity_remaining: b.quantity_remaining + oldQty };
+          });
+
+          const namedBatches = adjusted.filter((b) => b.batch_number);
+          formItem.batches = adjusted;
+
+          if (namedBatches.length > 0 && item.deductions && item.deductions.length > 0) {
+            formItem.useManualBatch = true;
+            formItem.allocations = item.deductions
+              .filter((d) => d.batch_number)
+              .map((d) => ({
+                id: Date.now() + Math.random(),
+                batch_id: d.batch_id,
+                quantity: String(d.quantity),
+              }));
+
+            if (formItem.allocations.length === 0 && namedBatches.length > 0) {
+              formItem.allocations = [emptyAllocation()];
+            }
+          } else if (namedBatches.length > 0) {
+            formItem.useManualBatch = true;
+            formItem.allocations = [emptyAllocation()];
+          }
+        } catch {}
+
+        formItems.push(formItem);
+      }
+
+      setItems(formItems.length > 0 ? formItems : [emptyItem()]);
+    } catch (err) {
+      showToast('Failed to load order', 'error');
+    } finally {
+      setLoadingOrder(false);
+    }
+  };
 
   const handleProductChange = async (itemId, productId) => {
     setItems((prev) =>
@@ -51,13 +147,24 @@ export default function OrderForm() {
 
     try {
       const { data } = await api.get(`/batches/product/${productId}`);
-      const available = data.filter((b) => b.quantity_remaining > 0);
+      let available = data.filter((b) => b.quantity_remaining > 0);
+
+      // If editing, adjust batch quantities with old deductions
+      if (isEdit) {
+        available = data.filter((b) => b.quantity_remaining > 0 || oldDeductions.some((d) => d.batch_id === b.id));
+        available = available.map((b) => {
+          const oldQty = oldDeductions
+            .filter((d) => d.batch_id === b.id)
+            .reduce((sum, d) => sum + d.quantity, 0);
+          return { ...b, quantity_remaining: b.quantity_remaining + oldQty };
+        });
+      }
+
       const namedBatches = available.filter((b) => b.batch_number);
       const hasNamedBatches = namedBatches.length > 0;
       setItems((prev) =>
         prev.map((item) => {
           if (item.id !== itemId) return item;
-          // Auto-select if only one named batch
           const autoAlloc = hasNamedBatches && namedBatches.length === 1
             ? [{ ...emptyAllocation(), batch_id: namedBatches[0].id }]
             : hasNamedBatches ? [emptyAllocation()] : [];
@@ -88,7 +195,6 @@ export default function OrderForm() {
     setItems((prev) => prev.filter((item) => item.id !== itemId));
   };
 
-  // Allocation management
   const addAllocation = (itemId) => {
     setItems((prev) =>
       prev.map((item) => {
@@ -124,9 +230,6 @@ export default function OrderForm() {
     );
   };
 
-  const toggleManualBatch = () => {};  // kept for reference, no longer used
-
-  // Get how much of a batch is allocated across ALL items (for display)
   const getAllocatedForBatch = (batchId, excludeAllocId) => {
     let total = 0;
     for (const item of items) {
@@ -170,7 +273,6 @@ export default function OrderForm() {
         const totalQty = Number(item.quantity) || 0;
         const allocTotal = getAllocatedTotal(item);
 
-        // Check each allocation
         item.allocations.forEach((alloc, i) => {
           if (!alloc.batch_id) rowErrors.push(`Batch allocation ${i + 1}: select a batch`);
           if (!alloc.quantity || Number(alloc.quantity) <= 0) rowErrors.push(`Batch allocation ${i + 1}: enter quantity`);
@@ -201,7 +303,6 @@ export default function OrderForm() {
 
     setSubmitting(true);
     try {
-      // Flatten: each allocation becomes a separate item in the payload
       const payload = [];
       for (const item of items) {
         if (item.useManualBatch && item.allocations.length > 0) {
@@ -221,20 +322,31 @@ export default function OrderForm() {
         }
       }
 
-      await api.post('/orders', {
+      const body = {
         customer_id: customerId,
         order_date: orderDate,
         items: payload,
-      });
+      };
 
-      showToast('Order created successfully');
-      setTimeout(() => navigate('/orders'), 600);
+      if (isEdit) {
+        await api.put(`/orders/${id}`, body);
+        showToast('Order updated successfully');
+        setTimeout(() => navigate(`/orders/${id}`), 600);
+      } else {
+        await api.post('/orders', body);
+        showToast('Order created successfully');
+        setTimeout(() => navigate('/orders'), 600);
+      }
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to create order', 'error');
+      showToast(err.response?.data?.error || `Failed to ${isEdit ? 'update' : 'create'} order`, 'error');
     } finally {
       setSubmitting(false);
     }
   };
+
+  if (loadingOrder) {
+    return <p className="text-gray-500">Loading order...</p>;
+  }
 
   return (
     <div>
@@ -245,9 +357,11 @@ export default function OrderForm() {
       )}
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Create New Order</h2>
-        <button onClick={() => navigate('/orders')} className="text-sm text-gray-500 hover:text-gray-700">
-          &larr; Back to Orders
+        <h2 className="text-2xl font-bold text-gray-800">
+          {isEdit ? `Edit Order${invoiceNumber ? ` — ${invoiceNumber}` : ''}` : 'Create New Order'}
+        </h2>
+        <button onClick={() => navigate(isEdit ? `/orders/${id}` : '/orders')} className="text-sm text-gray-500 hover:text-gray-700">
+          &larr; {isEdit ? 'Back to Order' : 'Back to Orders'}
         </button>
       </div>
 
@@ -298,9 +412,6 @@ export default function OrderForm() {
 
           <div className="divide-y divide-gray-100">
             {items.map((item, idx) => {
-              const namedBatches = item.batches.filter((b) => b.batch_number);
-              const hasNamedBatches = namedBatches.length > 0;
-
               return (
                 <div key={item.id} className={`px-5 py-4 ${errors[item.id] ? 'bg-red-50' : ''}`}>
                   <div className="flex items-center justify-between mb-3">
@@ -389,11 +500,10 @@ export default function OrderForm() {
                       </div>
 
                       <div className="space-y-2">
-                        {item.allocations.map((alloc, aIdx) => {
+                        {item.allocations.map((alloc) => {
                           const adjusted = getAdjustedBatches(item, alloc.id).filter((b) => b.batch_number);
                           const available = adjusted.filter((b) => b.adjusted_remaining > 0 || b.id === alloc.batch_id);
                           const selectedBatch = adjusted.find((b) => b.id === alloc.batch_id);
-                          const isExpired = selectedBatch?.expiry_date && new Date(selectedBatch.expiry_date) < new Date();
 
                           return (
                             <div key={alloc.id} className="flex flex-col sm:flex-row sm:items-start gap-2">
@@ -463,7 +573,7 @@ export default function OrderForm() {
           <div className="flex gap-3">
             <button
               type="button"
-              onClick={() => navigate('/orders')}
+              onClick={() => navigate(isEdit ? `/orders/${id}` : '/orders')}
               className="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200 text-sm transition-colors"
             >
               Cancel
@@ -473,7 +583,7 @@ export default function OrderForm() {
               disabled={submitting}
               className="px-5 py-2 bg-yellow-500 text-gray-900 rounded hover:bg-yellow-600 font-semibold text-sm disabled:opacity-50 transition-colors"
             >
-              {submitting ? 'Creating...' : 'Create Order'}
+              {submitting ? (isEdit ? 'Updating...' : 'Creating...') : (isEdit ? 'Update Order' : 'Create Order')}
             </button>
           </div>
         </div>

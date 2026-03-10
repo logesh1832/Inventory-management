@@ -78,7 +78,7 @@ export default function Dashboard() {
             <h3 className="text-lg font-semibold text-gray-800">Recent Orders</h3>
             <Link to="/orders" className="text-sm text-yellow-600 hover:underline">View All</Link>
           </div>
-          {data.recent_orders.length === 0 ? (
+          {!data.recent_orders || data.recent_orders.length === 0 ? (
             <p className="px-5 py-4 text-gray-400 text-sm">No orders yet.</p>
           ) : (
             <div className="divide-y divide-gray-200">
@@ -107,7 +107,7 @@ export default function Dashboard() {
             <h3 className="text-lg font-semibold text-gray-800">Recent Stock Movements</h3>
             <Link to="/stock-movements" className="text-sm text-yellow-600 hover:underline">View All</Link>
           </div>
-          {data.recent_movements.length === 0 ? (
+          {!data.recent_movements || data.recent_movements.length === 0 ? (
             <p className="px-5 py-4 text-gray-400 text-sm">No movements yet.</p>
           ) : (
             <div className="divide-y divide-gray-200">
@@ -145,7 +145,7 @@ export default function Dashboard() {
             <Link to="/stock-report" className="text-sm text-yellow-600 hover:underline flex-shrink-0">Full Report</Link>
           </div>
         </div>
-        {data.stock_summary.length === 0 ? (
+        {!data.stock_summary || data.stock_summary.length === 0 ? (
           <p className="px-5 py-4 text-gray-400">No products found.</p>
         ) : (
           <div className="overflow-x-auto">

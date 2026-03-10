@@ -45,15 +45,21 @@ export default function OrderDetail() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 no-print">
         <h2 className="text-2xl font-bold text-gray-800">Order Detail</h2>
         <div className="flex gap-3">
+          <Link
+            to={`/orders/${id}/edit`}
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors text-sm font-medium"
+          >
+            Edit Order
+          </Link>
           <button
             onClick={() => window.print()}
-            className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300 transition-colors"
+            className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300 transition-colors text-sm"
           >
             Print Invoice
           </button>
           <Link
             to="/orders"
-            className="bg-yellow-500 text-gray-900 px-4 py-2 rounded hover:bg-yellow-600 transition-colors"
+            className="bg-yellow-500 text-gray-900 px-4 py-2 rounded hover:bg-yellow-600 transition-colors text-sm"
           >
             Back to Orders
           </Link>

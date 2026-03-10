@@ -156,8 +156,16 @@ export default function Orders() {
               <div className="text-sm text-gray-500">
                 <span className="text-gray-400">Customer:</span> {o.customer_name}
               </div>
-              <div className="text-sm text-gray-500">
-                <span className="text-gray-400">Date:</span> {new Date(o.order_date).toLocaleDateString()}
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-500">
+                  <span className="text-gray-400">Date:</span> {new Date(o.order_date).toLocaleDateString()}
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); navigate(`/orders/${o.id}/edit`); }}
+                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                >
+                  Edit
+                </button>
               </div>
             </div>
           ))}
@@ -172,6 +180,7 @@ export default function Orders() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order Date</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -196,6 +205,14 @@ export default function Orders() {
                     >
                       {o.status}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigate(`/orders/${o.id}/edit`); }}
+                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                    >
+                      Edit
+                    </button>
                   </td>
                 </tr>
               ))}
