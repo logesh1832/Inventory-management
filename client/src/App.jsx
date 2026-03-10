@@ -10,6 +10,7 @@ import Customers from './pages/Customers';
 import CustomerForm from './pages/CustomerForm';
 import Batches from './pages/Batches';
 import BatchForm from './pages/BatchForm';
+import StockEntryEdit from './pages/StockEntryEdit';
 import Orders from './pages/Orders';
 import OrderForm from './pages/OrderForm';
 import OrderDetail from './pages/OrderDetail';
@@ -39,6 +40,7 @@ function App() {
               <Route path="/customers/:id/edit" element={<CustomerForm />} />
               <Route path="/batches" element={<Batches />} />
               <Route path="/batches/new" element={<BatchForm />} />
+              <Route path="/batches/stock-entries/:id/edit" element={<StockEntryEdit />} />
               <Route path="/orders/new" element={<OrderForm />} />
               <Route path="/orders/:id/edit" element={<OrderForm />} />
               <Route path="/orders/:id" element={<OrderDetail />} />

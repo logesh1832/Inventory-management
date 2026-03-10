@@ -1,259 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
 import Pagination from '../components/Pagination';
 
 const today = () => new Date().toISOString().split('T')[0];
 
-function EditStockEntryModal({ entryId, suppliers, onClose, onSaved }) {
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [entry, setEntry] = useState(null);
-  const [form, setForm] = useState({});
-  const [error, setError] = useState('');
-  const [productBatches, setProductBatches] = useState([]);
-  const [batchMode, setBatchMode] = useState('current'); // 'current' | 'existing' | 'new'
-
-  useEffect(() => {
-    api.get(`/batches/stock-entries/${entryId}`)
-      .then(async (res) => {
-        const e = res.data;
-        setEntry(e);
-        const toDateStr = (v) => {
-          if (!v) return '';
-          const d = new Date(v);
-          return isNaN(d) ? '' : d.toISOString().split('T')[0];
-        };
-        setForm({
-          quantity: String(e.quantity),
-          supplier_id: e.supplier_id || '',
-          received_date: toDateStr(e.received_date),
-          batch_id: e.batch_id || '',
-          existing_batch_id: '',
-          batch_number: e.batch_number || '',
-          manufacture_date: toDateStr(e.manufacture_date),
-          expiry_date: toDateStr(e.expiry_date),
-        });
-
-        // Fetch other batches for this product if batch tracked
-        if (e.batch_tracking && e.product_id) {
-          try {
-            const { data } = await api.get(`/batches/product/${e.product_id}`);
-            setProductBatches(data.filter((b) => b.batch_number && b.id !== e.batch_id));
-          } catch {}
-        }
-      })
-      .catch(() => setError('Failed to load stock entry'))
-      .finally(() => setLoading(false));
-  }, [entryId]);
-
-  const handleSave = async () => {
-    if (!form.quantity || Number(form.quantity) <= 0) {
-      setError('Quantity must be greater than 0');
-      return;
-    }
-    if (batchMode === 'existing' && !form.existing_batch_id) {
-      setError('Please select a batch');
-      return;
-    }
-    setSaving(true);
-    setError('');
-    try {
-      const payload = {
-        quantity: Number(form.quantity),
-        supplier_id: form.supplier_id || null,
-        received_date: form.received_date || null,
-      };
-
-      if (batchMode === 'existing') {
-        payload.move_to_batch_id = form.existing_batch_id;
-      } else if (batchMode === 'new') {
-        payload.batch_number = form.batch_number || null;
-        payload.manufacture_date = form.manufacture_date || null;
-        payload.expiry_date = form.expiry_date || null;
-      } else {
-        // current - keep same batch, allow editing batch details
-        payload.batch_number = form.batch_number || null;
-        payload.manufacture_date = form.manufacture_date || null;
-        payload.expiry_date = form.expiry_date || null;
-      }
-
-      await api.put(`/batches/stock-entries/${entryId}`, payload);
-      onSaved();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to update');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-800">Edit Stock Entry</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="p-5 space-y-4">
-          {loading ? (
-            <p className="text-gray-500">Loading...</p>
-          ) : (
-            <>
-              {/* Product (read-only) */}
-              {entry && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
-                  <p className="text-sm text-gray-800 bg-gray-50 rounded px-3 py-2">
-                    {entry.product_name} ({entry.product_code})
-                  </p>
-                </div>
-              )}
-
-              {/* Quantity */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Quantity <span className="text-red-500">*</span></label>
-                <input
-                  type="number"
-                  min="1"
-                  value={form.quantity}
-                  onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                />
-              </div>
-
-              {/* Supplier */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
-                <SearchableSelect
-                  options={suppliers.map((s) => ({ value: s.id, label: s.customer_name }))}
-                  value={form.supplier_id}
-                  onChange={(val) => setForm({ ...form, supplier_id: val })}
-                  placeholder="Select supplier..."
-                />
-              </div>
-
-              {/* Received Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Received Date</label>
-                <input
-                  type="date"
-                  value={form.received_date}
-                  onChange={(e) => setForm({ ...form, received_date: e.target.value })}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                />
-              </div>
-
-              {/* Batch details (only if batch tracked) */}
-              {entry?.batch_tracking && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Batch</label>
-                    <div className="flex bg-gray-100 rounded text-xs overflow-hidden w-fit mb-3">
-                      <button
-                        type="button"
-                        onClick={() => setBatchMode('current')}
-                        className={`px-3 py-1.5 transition-colors ${batchMode === 'current' ? 'bg-yellow-500 text-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
-                      >
-                        Current Batch
-                      </button>
-                      {productBatches.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setBatchMode('existing')}
-                          className={`px-3 py-1.5 transition-colors ${batchMode === 'existing' ? 'bg-yellow-500 text-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
-                        >
-                          Move to Existing
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setBatchMode('new')}
-                        className={`px-3 py-1.5 transition-colors ${batchMode === 'new' ? 'bg-yellow-500 text-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
-                      >
-                        New Batch
-                      </button>
-                    </div>
-
-                    {batchMode === 'existing' ? (
-                      <SearchableSelect
-                        options={productBatches.map((b) => ({
-                          value: b.id,
-                          label: `${b.batch_number} (Remaining: ${b.quantity_remaining})`,
-                        }))}
-                        value={form.existing_batch_id}
-                        onChange={(val) => setForm({ ...form, existing_batch_id: val })}
-                        placeholder="Select existing batch..."
-                      />
-                    ) : (
-                      <>
-                        <div className="mb-3">
-                          <label className="block text-xs font-medium text-gray-500 mb-1">Batch Number</label>
-                          <input
-                            type="text"
-                            value={form.batch_number}
-                            onChange={(e) => setForm({ ...form, batch_number: e.target.value })}
-                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Manufacture Date</label>
-                            <input
-                              type="date"
-                              value={form.manufacture_date}
-                              onChange={(e) => setForm({ ...form, manufacture_date: e.target.value })}
-                              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Expiry Date</label>
-                            <input
-                              type="date"
-                              value={form.expiry_date}
-                              onChange={(e) => setForm({ ...form, expiry_date: e.target.value })}
-                              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                            />
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </>
-              )}
-
-              {error && <p className="text-red-600 text-sm">{error}</p>}
-            </>
-          )}
-        </div>
-
-        <div className="px-5 py-4 border-t border-gray-200 flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200 text-sm"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving || loading}
-            className="px-4 py-2 bg-yellow-500 text-gray-900 rounded hover:bg-yellow-600 font-semibold text-sm disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : 'Save Changes'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function Batches() {
+  const navigate = useNavigate();
   const [tab, setTab] = useState('entries'); // 'entries' | 'batches'
   const [entries, setEntries] = useState([]);
   const [entriesTotal, setEntriesTotal] = useState(0);
@@ -267,7 +21,6 @@ export default function Batches() {
   const [toDate, setToDate] = useState(today());
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [editEntryId, setEditEntryId] = useState(null);
 
   useEffect(() => {
     api.get('/products').then((res) => setProducts(res.data)).catch(() => {});
@@ -308,24 +61,10 @@ export default function Batches() {
     fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, pg);
   };
 
-  const handleEditSaved = () => {
-    setEditEntryId(null);
-    fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, page);
-  };
-
   return (
     <div>
-      {editEntryId && (
-        <EditStockEntryModal
-          entryId={editEntryId}
-          suppliers={suppliers}
-          onClose={() => setEditEntryId(null)}
-          onSaved={handleEditSaved}
-        />
-      )}
-
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Batches & Stock</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Material In</h2>
         <Link
           to="/batches/new"
           className="bg-yellow-500 text-gray-900 px-4 py-2 rounded hover:bg-yellow-600 transition-colors font-semibold text-sm text-center"
@@ -415,7 +154,7 @@ export default function Batches() {
                       +{e.quantity}
                     </span>
                     <button
-                      onClick={() => setEditEntryId(e.id)}
+                      onClick={() => navigate(`/batches/stock-entries/${e.id}/edit`)}
                       className="text-blue-600 hover:text-blue-800 text-xs font-medium"
                     >
                       Edit
@@ -501,7 +240,7 @@ export default function Batches() {
                     </td>
                     <td className="px-5 py-3 text-sm">
                       <button
-                        onClick={() => setEditEntryId(e.id)}
+                        onClick={() => navigate(`/batches/stock-entries/${e.id}/edit`)}
                         className="text-blue-600 hover:text-blue-800 text-sm font-medium"
                       >
                         Edit

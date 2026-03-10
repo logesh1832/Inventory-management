@@ -41,7 +41,7 @@ export default function Dashboard() {
     { label: 'Total Products', value: data.total_products, color: 'bg-blue-500', link: '/products' },
     { label: 'Stock Value', value: formatINR(data.total_stock_value), color: 'bg-green-500', isText: true, link: '/stock-report' },
     { label: 'Total Customers', value: data.total_customers, color: 'bg-purple-500', link: '/customers' },
-    { label: 'Total Orders', value: data.total_orders, color: 'bg-indigo-500', link: '/orders' },
+    { label: 'Total Material Out', value: data.total_orders, color: 'bg-indigo-500', link: '/orders' },
     { label: 'Low Stock Alerts', value: data.low_stock_count, color: data.low_stock_count > 0 ? 'bg-red-500' : 'bg-gray-400', link: '/stock-report' },
   ];
 
@@ -75,7 +75,7 @@ export default function Dashboard() {
         {/* Recent Orders */}
         <div className="bg-white rounded-lg shadow">
           <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-800">Recent Orders</h3>
+            <h3 className="text-lg font-semibold text-gray-800">Recent Material Out</h3>
             <Link to="/orders" className="text-sm text-yellow-600 hover:underline">View All</Link>
           </div>
           {!data.recent_orders || data.recent_orders.length === 0 ? (

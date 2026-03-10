@@ -418,4 +418,46 @@ const updateStockEntry = async (req, res, next) => {
   }
 };
 
-module.exports = { createBatch, createBulkBatches, getAllBatches, getStockEntries, getStockEntryById, updateStockEntry, getBatchById, getBatchesByProduct };
+// GET /api/batches/stock-entries/:id/siblings — all entries with same supplier + received_date
+const getStockEntrySiblings = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // First get the clicked entry to find supplier_id + received_date
+    const ref = await pool.query(
+      `SELECT sm.supplier_id, COALESCE(sm.received_date, ib.received_date, sm.created_at::date) AS received_date
+       FROM stock_movements sm
+       LEFT JOIN inventory_batches ib ON ib.id = sm.batch_id
+       WHERE sm.id = $1 AND sm.movement_type = 'IN'`,
+      [id]
+    );
+    if (ref.rows.length === 0) {
+      return res.status(404).json({ error: 'Stock entry not found' });
+    }
+    const { supplier_id, received_date } = ref.rows[0];
+
+    // Fetch all siblings
+    const result = await pool.query(
+      `SELECT sm.id, sm.quantity, sm.supplier_id,
+              COALESCE(sm.received_date, ib.received_date, sm.created_at::date) AS received_date,
+              sm.product_id, sm.batch_id,
+              p.product_name, p.product_code, p.batch_tracking,
+              ib.batch_number, ib.manufacture_date, ib.expiry_date,
+              c.customer_name AS supplier_name
+       FROM stock_movements sm
+       JOIN products p ON p.id = sm.product_id
+       LEFT JOIN inventory_batches ib ON ib.id = sm.batch_id
+       LEFT JOIN customers c ON c.id = sm.supplier_id
+       WHERE sm.movement_type = 'IN'
+         AND sm.supplier_id = $1
+         AND COALESCE(sm.received_date, ib.received_date, sm.created_at::date) = $2
+       ORDER BY sm.created_at ASC`,
+      [supplier_id, received_date]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { createBatch, createBulkBatches, getAllBatches, getStockEntries, getStockEntryById, getStockEntrySiblings, updateStockEntry, getBatchById, getBatchesByProduct };

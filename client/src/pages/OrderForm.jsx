@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
@@ -18,6 +18,28 @@ const emptyItem = () => ({
   useManualBatch: false,
 });
 
+// Focus helpers
+const focusProduct = (itemId) => {
+  setTimeout(() => {
+    const el = document.querySelector(`[data-item-product="${itemId}"] button`);
+    if (el) el.focus();
+  }, 50);
+};
+
+const focusAllocBatch = (allocId) => {
+  setTimeout(() => {
+    const el = document.querySelector(`[data-alloc-batch="${allocId}"] button`);
+    if (el) { el.focus(); el.click(); }
+  }, 50);
+};
+
+const focusAllocQty = (allocId) => {
+  setTimeout(() => {
+    const el = document.querySelector(`[data-alloc-qty="${allocId}"]`);
+    if (el) el.focus();
+  }, 50);
+};
+
 export default function OrderForm() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -34,8 +56,11 @@ export default function OrderForm() {
   const [toast, setToast] = useState(null);
   const [loadingOrder, setLoadingOrder] = useState(isEdit);
 
-  // Store old deductions so we can adjust available batch quantities
   const [oldDeductions, setOldDeductions] = useState([]);
+
+  const formRef = useRef(null);
+  const qtyRefs = useRef({});
+  const dateRef = useRef(null);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -49,11 +74,7 @@ export default function OrderForm() {
     ]).then(([custRes, prodRes]) => {
       setCustomers(custRes.data);
       setProducts(prodRes.data);
-
-      // Load existing order if editing
-      if (isEdit) {
-        loadOrder(prodRes.data);
-      }
+      if (isEdit) loadOrder(prodRes.data);
     }).catch(() => {});
   }, []);
 
@@ -66,7 +87,6 @@ export default function OrderForm() {
       setOrderDate(order.order_date ? order.order_date.split('T')[0] : '');
       setInvoiceNumber(order.invoice_number);
 
-      // Collect all old deductions for batch availability adjustment
       const allOldDeductions = [];
       for (const item of order.items) {
         if (item.deductions) {
@@ -77,7 +97,6 @@ export default function OrderForm() {
       }
       setOldDeductions(allOldDeductions);
 
-      // Build form items from order items
       const formItems = [];
       for (const item of order.items) {
         const formItem = {
@@ -89,12 +108,9 @@ export default function OrderForm() {
           useManualBatch: false,
         };
 
-        // Fetch batches for this product
         try {
           const { data: batchData } = await api.get(`/batches/product/${item.product_id}`);
           const available = batchData.filter((b) => b.quantity_remaining > 0 || allOldDeductions.some((d) => d.batch_id === b.id));
-
-          // Adjust batch quantities: add back old deductions
           const adjusted = available.map((b) => {
             const oldQty = allOldDeductions
               .filter((d) => d.batch_id === b.id)
@@ -114,7 +130,6 @@ export default function OrderForm() {
                 batch_id: d.batch_id,
                 quantity: String(d.quantity),
               }));
-
             if (formItem.allocations.length === 0 && namedBatches.length > 0) {
               formItem.allocations = [emptyAllocation()];
             }
@@ -149,7 +164,6 @@ export default function OrderForm() {
       const { data } = await api.get(`/batches/product/${productId}`);
       let available = data.filter((b) => b.quantity_remaining > 0);
 
-      // If editing, adjust batch quantities with old deductions
       if (isEdit) {
         available = data.filter((b) => b.quantity_remaining > 0 || oldDeductions.some((d) => d.batch_id === b.id));
         available = available.map((b) => {
@@ -188,7 +202,11 @@ export default function OrderForm() {
     }
   };
 
-  const addItem = () => setItems((prev) => [...prev, emptyItem()]);
+  const addItem = useCallback(() => {
+    const newItem = emptyItem();
+    setItems((prev) => [...prev, newItem]);
+    focusProduct(newItem.id);
+  }, []);
 
   const removeItem = (itemId) => {
     if (items.length === 1) return;
@@ -196,12 +214,14 @@ export default function OrderForm() {
   };
 
   const addAllocation = (itemId) => {
+    const newAlloc = emptyAllocation();
     setItems((prev) =>
       prev.map((item) => {
         if (item.id !== itemId) return item;
-        return { ...item, allocations: [...item.allocations, emptyAllocation()] };
+        return { ...item, allocations: [...item.allocations, newAlloc] };
       })
     );
+    focusAllocBatch(newAlloc.id);
   };
 
   const updateAllocation = (itemId, allocId, field, value) => {
@@ -258,6 +278,69 @@ export default function OrderForm() {
   const getAllocatedTotal = (item) => {
     return item.allocations.reduce((sum, a) => sum + (Number(a.quantity) || 0), 0);
   };
+
+  // --- Keyboard handlers ---
+
+  // Date → Enter → first product
+  const handleDateKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (items.length > 0) focusProduct(items[0].id);
+    }
+  };
+
+  // Qty → Enter: if batch allocs, focus first alloc batch; else add new item
+  const handleQtyKeyDown = (e, item) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.shiftKey) { formRef.current?.requestSubmit(); return; }
+      if (item.useManualBatch && item.allocations.length > 0) {
+        focusAllocBatch(item.allocations[0].id);
+      } else {
+        goToNextItemOrAdd(item.id);
+      }
+    }
+  };
+
+  // Alloc qty → Enter: if total allocated < item qty, add new batch row; else next product
+  const handleAllocQtyKeyDown = (e, item, allocIdx) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.shiftKey) { formRef.current?.requestSubmit(); return; }
+
+      // If there are more existing alloc rows after this one, go to next
+      if (allocIdx < item.allocations.length - 1) {
+        focusAllocBatch(item.allocations[allocIdx + 1].id);
+        return;
+      }
+
+      // Check if total allocated meets item quantity
+      const totalAllocated = item.allocations.reduce((sum, a) => sum + (Number(a.quantity) || 0), 0);
+      const itemQty = Number(item.quantity) || 0;
+
+      if (itemQty > 0 && totalAllocated < itemQty) {
+        // Not enough allocated — add another batch allocation row
+        addAllocation(item.id);
+      } else {
+        // Fully allocated — move to next product item
+        goToNextItemOrAdd(item.id);
+      }
+    }
+  };
+
+  const goToNextItemOrAdd = useCallback((itemId) => {
+    setItems((prev) => {
+      const idx = prev.findIndex((i) => i.id === itemId);
+      if (idx === prev.length - 1) {
+        const newItem = emptyItem();
+        setTimeout(() => focusProduct(newItem.id), 50);
+        return [...prev, newItem];
+      } else {
+        focusProduct(prev[idx + 1].id);
+        return prev;
+      }
+    });
+  }, []);
 
   const validate = () => {
     const newErrors = {};
@@ -358,14 +441,20 @@ export default function OrderForm() {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h2 className="text-2xl font-bold text-gray-800">
-          {isEdit ? `Edit Order${invoiceNumber ? ` — ${invoiceNumber}` : ''}` : 'Create New Order'}
+          {isEdit ? `Edit${invoiceNumber ? ` — ${invoiceNumber}` : ''}` : 'Create New Material Out'}
         </h2>
-        <button onClick={() => navigate(isEdit ? `/orders/${id}` : '/orders')} className="text-sm text-gray-500 hover:text-gray-700">
-          &larr; {isEdit ? 'Back to Order' : 'Back to Orders'}
+        <button onClick={() => navigate(isEdit ? `/orders/${id}` : '/orders')} tabIndex={-1} className="text-sm text-gray-500 hover:text-gray-700">
+          &larr; {isEdit ? 'Back to Detail' : 'Back to Material Out'}
         </button>
       </div>
 
-      <form onSubmit={handleSubmit}>
+      {/* Keyboard shortcut hints */}
+      <div className="flex flex-wrap gap-3 mb-4 text-xs text-gray-400">
+        <span className="bg-gray-100 px-2 py-1 rounded"><kbd className="font-mono font-semibold text-gray-500">Enter</kbd> next field / add item</span>
+        <span className="bg-gray-100 px-2 py-1 rounded"><kbd className="font-mono font-semibold text-gray-500">Shift+Enter</kbd> save</span>
+      </div>
+
+      <form ref={formRef} onSubmit={handleSubmit}>
         {/* Top Section: Customer + Date */}
         <div className="bg-white rounded-lg shadow p-5 mb-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -379,6 +468,8 @@ export default function OrderForm() {
                 onChange={(val) => { setCustomerId(val); setErrors((p) => ({ ...p, customer: undefined })); }}
                 placeholder="Select customer..."
                 error={!!errors.customer}
+                autoFocus={!isEdit}
+                onEnterAfterSelect={() => { if (items.length > 0) focusProduct(items[0].id); }}
               />
               {errors.customer && <p className="text-red-500 text-xs mt-1">{errors.customer}</p>}
             </div>
@@ -387,9 +478,11 @@ export default function OrderForm() {
                 Order Date <span className="text-red-500">*</span>
               </label>
               <input
+                ref={dateRef}
                 type="date"
                 value={orderDate}
                 onChange={(e) => { setOrderDate(e.target.value); setErrors((p) => ({ ...p, date: undefined })); }}
+                onKeyDown={handleDateKeyDown}
                 className={`w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 ${errors.date ? 'border-red-500' : 'border-gray-300'}`}
               />
               {errors.date && <p className="text-red-500 text-xs mt-1">{errors.date}</p>}
@@ -404,6 +497,7 @@ export default function OrderForm() {
             <button
               type="button"
               onClick={addItem}
+              tabIndex={-1}
               className="text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1 rounded font-medium transition-colors"
             >
               + Add Item
@@ -420,6 +514,7 @@ export default function OrderForm() {
                       <button
                         type="button"
                         onClick={() => removeItem(item.id)}
+                        tabIndex={-1}
                         className="text-red-400 hover:text-red-600 transition-colors text-xs flex items-center gap-1"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -432,13 +527,14 @@ export default function OrderForm() {
 
                   {/* Product + Quantity */}
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 mb-3">
-                    <div className="sm:col-span-8">
+                    <div className="sm:col-span-8" data-item-product={item.id}>
                       <label className="block text-xs font-medium text-gray-500 mb-1">Product <span className="text-red-500">*</span></label>
                       <SearchableSelect
                         options={products.map((p) => ({ value: p.id, label: `${p.product_name} (${p.product_code})` }))}
                         value={item.product_id}
                         onChange={(val) => handleProductChange(item.id, val)}
                         placeholder="Select product..."
+                        autoFocusNext={{ current: qtyRefs.current[item.id] }}
                       />
                       {item.product_id && (
                         <p className="text-xs text-gray-400 mt-1">
@@ -449,10 +545,12 @@ export default function OrderForm() {
                     <div className="sm:col-span-4">
                       <label className="block text-xs font-medium text-gray-500 mb-1">Quantity <span className="text-red-500">*</span></label>
                       <input
+                        ref={(el) => (qtyRefs.current[item.id] = el)}
                         type="number"
                         min="1"
                         value={item.quantity}
                         onChange={(e) => updateItem(item.id, 'quantity', e.target.value)}
+                        onKeyDown={(e) => handleQtyKeyDown(e, item)}
                         placeholder="0"
                         className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500"
                       />
@@ -470,7 +568,6 @@ export default function OrderForm() {
                       })()}
                     </div>
                   </div>
-
 
                   {/* Batch Allocations (Manual Mode) */}
                   {item.useManualBatch && item.allocations.length > 0 && (
@@ -492,6 +589,7 @@ export default function OrderForm() {
                           <button
                             type="button"
                             onClick={() => addAllocation(item.id)}
+                            tabIndex={-1}
                             className="text-xs text-blue-600 hover:text-blue-700 font-medium"
                           >
                             + Add Batch
@@ -500,14 +598,14 @@ export default function OrderForm() {
                       </div>
 
                       <div className="space-y-2">
-                        {item.allocations.map((alloc) => {
+                        {item.allocations.map((alloc, allocIdx) => {
                           const adjusted = getAdjustedBatches(item, alloc.id).filter((b) => b.batch_number);
                           const available = adjusted.filter((b) => b.adjusted_remaining > 0 || b.id === alloc.batch_id);
                           const selectedBatch = adjusted.find((b) => b.id === alloc.batch_id);
 
                           return (
                             <div key={alloc.id} className="flex flex-col sm:flex-row sm:items-start gap-2">
-                              <div className="flex-1">
+                              <div className="flex-1" data-alloc-batch={alloc.id}>
                                 <SearchableSelect
                                   options={available.map((b) => ({
                                     value: b.id,
@@ -521,15 +619,19 @@ export default function OrderForm() {
                                   value={alloc.batch_id}
                                   onChange={(val) => updateAllocation(item.id, alloc.id, 'batch_id', val)}
                                   placeholder="Select batch..."
+                                  autoFocusNext={{ current: document.querySelector(`[data-alloc-qty="${alloc.id}"]`) }}
+                                  onEnterAfterSelect={() => focusAllocQty(alloc.id)}
                                 />
                               </div>
                               <div className="w-24">
                                 <input
+                                  data-alloc-qty={alloc.id}
                                   type="number"
                                   min="1"
                                   max={selectedBatch ? selectedBatch.adjusted_remaining : undefined}
                                   value={alloc.quantity}
                                   onChange={(e) => updateAllocation(item.id, alloc.id, 'quantity', e.target.value)}
+                                  onKeyDown={(e) => handleAllocQtyKeyDown(e, item, allocIdx)}
                                   placeholder="Qty"
                                   className="w-full border border-gray-300 rounded px-2.5 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500"
                                 />
@@ -538,6 +640,7 @@ export default function OrderForm() {
                                 <button
                                   type="button"
                                   onClick={() => removeAllocation(item.id, alloc.id)}
+                                  tabIndex={-1}
                                   className="text-red-400 hover:text-red-600 mt-2"
                                 >
                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -574,6 +677,7 @@ export default function OrderForm() {
             <button
               type="button"
               onClick={() => navigate(isEdit ? `/orders/${id}` : '/orders')}
+              tabIndex={-1}
               className="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200 text-sm transition-colors"
             >
               Cancel
@@ -583,7 +687,7 @@ export default function OrderForm() {
               disabled={submitting}
               className="px-5 py-2 bg-yellow-500 text-gray-900 rounded hover:bg-yellow-600 font-semibold text-sm disabled:opacity-50 transition-colors"
             >
-              {submitting ? (isEdit ? 'Updating...' : 'Creating...') : (isEdit ? 'Update Order' : 'Create Order')}
+              {submitting ? (isEdit ? 'Updating...' : 'Creating...') : (isEdit ? 'Update' : 'Create')} <span className="text-xs opacity-60 ml-1">(Shift+Enter)</span>
             </button>
           </div>
         </div>

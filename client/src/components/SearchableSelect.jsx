@@ -9,13 +9,20 @@ export default function SearchableSelect({
   className = '',
   disabled = false,
   error = false,
+  onEnterAfterSelect,  // callback fired when Enter is pressed while already selected (dropdown closed)
+  autoFocusNext,       // ref to focus after selection
+  autoFocus = false,   // auto-open dropdown on mount
+  tabIndex,
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [highlightIdx, setHighlightIdx] = useState(-1);
   const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
   const ref = useRef(null);
   const dropRef = useRef(null);
   const inputRef = useRef(null);
+  const itemsRef = useRef([]);
+  const btnRef = useRef(null);
 
   const selected = options.find((o) => o.value === value);
 
@@ -26,6 +33,13 @@ export default function SearchableSelect({
       o.label.toLowerCase().includes(term) ||
       (o.sublabel && o.sublabel.toLowerCase().includes(term))
     );
+  });
+
+  // Build selectable list: optional clear + filtered options
+  const selectableItems = [];
+  if (value) selectableItems.push({ type: 'clear' });
+  filtered.forEach((o) => {
+    if (!o.disabled) selectableItems.push({ type: 'option', option: o });
   });
 
   const updatePosition = useCallback(() => {
@@ -47,15 +61,24 @@ export default function SearchableSelect({
       ) {
         setOpen(false);
         setSearch('');
+        setHighlightIdx(-1);
       }
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
+  // Auto-open on mount if autoFocus is true
+  useEffect(() => {
+    if (autoFocus && !disabled) {
+      setTimeout(() => setOpen(true), 100);
+    }
+  }, []);
+
   useEffect(() => {
     if (open) {
       updatePosition();
+      setHighlightIdx(-1);
       if (inputRef.current) inputRef.current.focus();
     }
   }, [open, updatePosition]);
@@ -70,10 +93,86 @@ export default function SearchableSelect({
     };
   }, [open, updatePosition]);
 
+  // Scroll highlighted item into view
+  useEffect(() => {
+    if (highlightIdx >= 0 && itemsRef.current[highlightIdx]) {
+      itemsRef.current[highlightIdx].scrollIntoView({ block: 'nearest' });
+    }
+  }, [highlightIdx]);
+
+  const focusNext = () => {
+    if (onEnterAfterSelect) {
+      setTimeout(() => onEnterAfterSelect(), 0);
+    } else if (autoFocusNext?.current) {
+      setTimeout(() => autoFocusNext.current?.focus(), 0);
+    } else if (btnRef.current) {
+      setTimeout(() => btnRef.current?.focus(), 0);
+    }
+  };
+
   const handleSelect = (val) => {
     onChange(val);
     setOpen(false);
     setSearch('');
+    setHighlightIdx(-1);
+    focusNext();
+  };
+
+  const handleKeyDown = (e) => {
+    if (!open) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        // If already has a value and dropdown is closed, move to next field
+        if (value && (onEnterAfterSelect || autoFocusNext)) {
+          if (onEnterAfterSelect) onEnterAfterSelect();
+          else focusNext();
+          return;
+        }
+        if (!disabled) setOpen(true);
+        return;
+      }
+      if (e.key === ' ' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (!disabled) setOpen(true);
+      }
+      return;
+    }
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setHighlightIdx((prev) => Math.min(prev + 1, selectableItems.length - 1));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setHighlightIdx((prev) => Math.max(prev - 1, 0));
+        break;
+      case 'Enter': {
+        e.preventDefault();
+        if (highlightIdx >= 0 && highlightIdx < selectableItems.length) {
+          const item = selectableItems[highlightIdx];
+          handleSelect(item.type === 'clear' ? '' : item.option.value);
+        } else if (selectableItems.length === 1) {
+          const item = selectableItems[0];
+          handleSelect(item.type === 'clear' ? '' : item.option.value);
+        }
+        break;
+      }
+      case 'Escape':
+        e.preventDefault();
+        setOpen(false);
+        setSearch('');
+        setHighlightIdx(-1);
+        btnRef.current?.focus();
+        break;
+      case 'Tab':
+        setOpen(false);
+        setSearch('');
+        setHighlightIdx(-1);
+        break;
+      default:
+        break;
+    }
   };
 
   const dropdown = open ? createPortal(
@@ -87,38 +186,50 @@ export default function SearchableSelect({
           ref={inputRef}
           type="text"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search..."
+          onChange={(e) => { setSearch(e.target.value); setHighlightIdx(0); }}
+          onKeyDown={handleKeyDown}
+          placeholder="Type to search..."
           className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-yellow-500"
         />
       </div>
       <div className="overflow-y-auto max-h-48">
-        {value && (
-          <button
-            type="button"
-            onClick={() => handleSelect('')}
-            className="w-full text-left px-3 py-2 text-sm text-gray-400 hover:bg-gray-50"
-          >
-            {placeholder}
-          </button>
-        )}
-        {filtered.length === 0 ? (
+        {selectableItems.length === 0 ? (
           <div className="px-3 py-3 text-sm text-gray-400 text-center">No results found</div>
         ) : (
-          filtered.map((o) => (
-            <button
-              type="button"
-              key={o.value}
-              onClick={() => handleSelect(o.value)}
-              className={`w-full text-left px-3 py-2 text-sm hover:bg-yellow-50 transition-colors ${
-                o.value === value ? 'bg-yellow-50 font-medium text-yellow-700' : 'text-gray-700'
-              } ${o.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
-              disabled={o.disabled}
-            >
-              <div>{o.label}</div>
-              {o.sublabel && <div className="text-xs text-gray-400">{o.sublabel}</div>}
-            </button>
-          ))
+          selectableItems.map((item, i) => {
+            if (item.type === 'clear') {
+              return (
+                <button
+                  type="button"
+                  key="__clear__"
+                  ref={(el) => (itemsRef.current[i] = el)}
+                  onClick={() => handleSelect('')}
+                  onMouseEnter={() => setHighlightIdx(i)}
+                  className={`w-full text-left px-3 py-2 text-sm text-gray-400 transition-colors ${
+                    i === highlightIdx ? 'bg-yellow-50' : 'hover:bg-gray-50'
+                  }`}
+                >
+                  {placeholder}
+                </button>
+              );
+            }
+            const o = item.option;
+            return (
+              <button
+                type="button"
+                key={o.value}
+                ref={(el) => (itemsRef.current[i] = el)}
+                onClick={() => handleSelect(o.value)}
+                onMouseEnter={() => setHighlightIdx(i)}
+                className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                  i === highlightIdx ? 'bg-yellow-100 text-yellow-800' : o.value === value ? 'bg-yellow-50 font-medium text-yellow-700' : 'text-gray-700 hover:bg-yellow-50'
+                }`}
+              >
+                <div>{o.label}</div>
+                {o.sublabel && <div className="text-xs text-gray-400">{o.sublabel}</div>}
+              </button>
+            );
+          })
         )}
       </div>
     </div>,
@@ -128,9 +239,12 @@ export default function SearchableSelect({
   return (
     <div ref={ref} className={`relative ${className}`}>
       <button
+        ref={btnRef}
         type="button"
         disabled={disabled}
+        tabIndex={tabIndex}
         onClick={() => { if (!disabled) setOpen(!open); }}
+        onKeyDown={handleKeyDown}
         className={`w-full text-left border rounded px-3 py-2 text-sm flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-yellow-500 ${
           disabled ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : 'bg-white cursor-pointer'
         } ${error ? 'border-red-500' : 'border-gray-300'}`}

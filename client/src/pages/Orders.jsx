@@ -73,12 +73,12 @@ export default function Orders() {
       )}
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Orders</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Material Out</h2>
         <Link
           to="/orders/new"
           className="bg-yellow-500 text-gray-900 px-4 py-2 rounded hover:bg-yellow-600 transition-colors text-center"
         >
-          Create New Order
+          Create New
         </Link>
       </div>
 
