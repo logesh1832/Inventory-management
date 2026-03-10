@@ -52,15 +52,20 @@ export default function OrderForm() {
     try {
       const { data } = await api.get(`/batches/product/${productId}`);
       const available = data.filter((b) => b.quantity_remaining > 0);
-      const hasNamedBatches = available.some((b) => b.batch_number);
+      const namedBatches = available.filter((b) => b.batch_number);
+      const hasNamedBatches = namedBatches.length > 0;
       setItems((prev) =>
         prev.map((item) => {
           if (item.id !== itemId) return item;
+          // Auto-select if only one named batch
+          const autoAlloc = hasNamedBatches && namedBatches.length === 1
+            ? [{ ...emptyAllocation(), batch_id: namedBatches[0].id }]
+            : hasNamedBatches ? [emptyAllocation()] : [];
           return {
             ...item,
             batches: available,
             useManualBatch: hasNamedBatches,
-            allocations: hasNamedBatches ? [emptyAllocation()] : [],
+            allocations: autoAlloc,
           };
         })
       );
@@ -340,6 +345,18 @@ export default function OrderForm() {
                         placeholder="0"
                         className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500"
                       />
+                      {(() => {
+                        const prod = products.find((p) => p.id === item.product_id);
+                        if (prod && prod.unit === 'Boxes' && prod.qty_per_box && item.quantity) {
+                          const total = Number(item.quantity) * prod.qty_per_box;
+                          return (
+                            <p className="text-xs text-blue-600 font-medium mt-1">
+                              {item.quantity} x {prod.qty_per_box} = {total} pcs
+                            </p>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   </div>
 

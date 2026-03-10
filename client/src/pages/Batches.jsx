@@ -2,15 +2,23 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
+import Pagination from '../components/Pagination';
+
+const today = () => new Date().toISOString().split('T')[0];
 
 export default function Batches() {
   const [tab, setTab] = useState('entries'); // 'entries' | 'batches'
   const [entries, setEntries] = useState([]);
+  const [entriesTotal, setEntriesTotal] = useState(0);
   const [batches, setBatches] = useState([]);
+  const [batchesTotal, setBatchesTotal] = useState(0);
   const [products, setProducts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [filterProductId, setFilterProductId] = useState('');
   const [filterSupplierId, setFilterSupplierId] = useState('');
+  const [fromDate, setFromDate] = useState(today());
+  const [toDate, setToDate] = useState(today());
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -18,24 +26,39 @@ export default function Batches() {
     api.get('/customers').then((res) => setSuppliers(res.data)).catch(() => {});
   }, []);
 
-  useEffect(() => {
+  const fetchData = (currentTab, productId, supplierId, fd, td, pg) => {
     setLoading(true);
-    if (tab === 'entries') {
-      const params = {};
-      if (filterProductId) params.product_id = filterProductId;
-      if (filterSupplierId) params.supplier_id = filterSupplierId;
+    if (currentTab === 'entries') {
+      const params = { page: pg, limit: 20 };
+      if (productId) params.product_id = productId;
+      if (supplierId) params.supplier_id = supplierId;
+      if (fd) params.from_date = fd;
+      if (td) params.to_date = td;
       api.get('/batches/stock-entries', { params })
-        .then((res) => setEntries(res.data))
+        .then((res) => { setEntries(res.data.data); setEntriesTotal(res.data.total); })
         .catch(() => {})
         .finally(() => setLoading(false));
     } else {
-      const params = filterProductId ? { product_id: filterProductId } : {};
+      const params = { page: pg, limit: 20 };
+      if (productId) params.product_id = productId;
+      if (fd) params.from_date = fd;
+      if (td) params.to_date = td;
       api.get('/batches', { params })
-        .then((res) => setBatches(res.data))
+        .then((res) => { setBatches(res.data.data); setBatchesTotal(res.data.total); })
         .catch(() => {})
         .finally(() => setLoading(false));
     }
-  }, [tab, filterProductId, filterSupplierId]);
+  };
+
+  useEffect(() => {
+    setPage(1);
+    fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, 1);
+  }, [tab, filterProductId, filterSupplierId, fromDate, toDate]);
+
+  const handlePageChange = (pg) => {
+    setPage(pg);
+    fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, pg);
+  };
 
   return (
     <div>
@@ -70,7 +93,7 @@ export default function Batches() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-4">
+      <div className="flex flex-wrap gap-3 mb-4 items-end">
         <div className="w-full sm:w-56">
           <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
           <SearchableSelect
@@ -91,6 +114,24 @@ export default function Batches() {
             />
           </div>
         )}
+        <div className="w-full sm:w-auto">
+          <label className="block text-xs font-medium text-gray-500 mb-1">From Date</label>
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            className="border border-gray-300 rounded px-3 py-2 w-full sm:w-40 text-sm"
+          />
+        </div>
+        <div className="w-full sm:w-auto">
+          <label className="block text-xs font-medium text-gray-500 mb-1">To Date</label>
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            className="border border-gray-300 rounded px-3 py-2 w-full sm:w-40 text-sm"
+          />
+        </div>
       </div>
 
       {loading ? (
@@ -100,6 +141,7 @@ export default function Batches() {
         entries.length === 0 ? (
           <p className="text-gray-500">No stock entries found.</p>
         ) : (
+          <>
           {/* Mobile cards - entries */}
           <div className="md:hidden space-y-3">
             {entries.map((e) => (
@@ -191,12 +233,16 @@ export default function Batches() {
               </tbody>
             </table>
           </div>
+
+          <Pagination page={page} total={entriesTotal} limit={20} onPageChange={handlePageChange} />
+          </>
         )
       ) : (
         /* Batch Summary Tab */
         batches.length === 0 ? (
           <p className="text-gray-500">No batches found.</p>
         ) : (
+          <>
           {/* Mobile cards - batch summary */}
           <div className="md:hidden space-y-3">
             {batches.map((b) => (
@@ -261,6 +307,9 @@ export default function Batches() {
               </tbody>
             </table>
           </div>
+
+          <Pagination page={page} total={batchesTotal} limit={20} onPageChange={handlePageChange} />
+          </>
         )
       )}
     </div>

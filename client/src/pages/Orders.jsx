@@ -2,17 +2,22 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
+import Pagination from '../components/Pagination';
+
+const today = () => new Date().toISOString().split('T')[0];
 
 export default function Orders() {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
+  const [total, setTotal] = useState(0);
   const [customers, setCustomers] = useState([]);
   const [filters, setFilters] = useState({
     customer_id: '',
     status: '',
-    from_date: '',
-    to_date: '',
+    from_date: today(),
+    to_date: today(),
   });
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
 
@@ -21,15 +26,16 @@ export default function Orders() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const fetchOrders = async (params) => {
+  const fetchOrders = async (params, pg) => {
     try {
       setLoading(true);
-      const cleanParams = {};
+      const cleanParams = { page: pg, limit: 20 };
       Object.entries(params).forEach(([k, v]) => {
         if (v) cleanParams[k] = v;
       });
       const res = await api.get('/orders', { params: cleanParams });
-      setOrders(res.data);
+      setOrders(res.data.data);
+      setTotal(res.data.total);
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to load orders', 'error');
     } finally {
@@ -39,13 +45,19 @@ export default function Orders() {
 
   useEffect(() => {
     api.get('/customers').then((res) => setCustomers(res.data)).catch(() => {});
-    fetchOrders(filters);
+    fetchOrders(filters, 1);
   }, []);
 
   const handleFilterChange = (e) => {
     const updated = { ...filters, [e.target.name]: e.target.value };
     setFilters(updated);
-    fetchOrders(updated);
+    setPage(1);
+    fetchOrders(updated, 1);
+  };
+
+  const handlePageChange = (pg) => {
+    setPage(pg);
+    fetchOrders(filters, pg);
   };
 
   return (
@@ -120,6 +132,7 @@ export default function Orders() {
       ) : orders.length === 0 ? (
         <p className="text-gray-500">No orders found.</p>
       ) : (
+        <>
         {/* Mobile cards */}
         <div className="md:hidden space-y-3">
           {orders.map((o) => (
@@ -189,6 +202,9 @@ export default function Orders() {
             </tbody>
           </table>
         </div>
+
+        <Pagination page={page} total={total} limit={20} onPageChange={handlePageChange} />
+        </>
       )}
     </div>
   );

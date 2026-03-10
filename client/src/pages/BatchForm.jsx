@@ -242,6 +242,18 @@ export default function BatchForm() {
                       placeholder="0"
                       className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500"
                     />
+                    {(() => {
+                      const prod = products.find((p) => p.id === row.product_id);
+                      if (prod && prod.unit === 'Boxes' && prod.qty_per_box && row.quantity) {
+                        const total = Number(row.quantity) * prod.qty_per_box;
+                        return (
+                          <p className="text-xs text-blue-600 font-medium mt-1">
+                            {row.quantity} x {prod.qty_per_box} = {total} pcs
+                          </p>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                 </div>
 

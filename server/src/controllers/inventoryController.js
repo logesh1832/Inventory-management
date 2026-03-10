@@ -2,11 +2,9 @@ const pool = require('../config/db');
 
 const getStockMovements = async (req, res, next) => {
   try {
-    const { product_id, movement_type, from_date, to_date } = req.query;
+    const { product_id, movement_type, from_date, to_date, page = 1, limit = 20 } = req.query;
 
-    let query = `
-      SELECT sm.*, p.product_name, ib.batch_number,
-        CASE WHEN sm.reference_type = 'ORDER' THEN o.invoice_number ELSE NULL END AS invoice_number
+    const baseFrom = `
       FROM stock_movements sm
       JOIN products p ON p.id = sm.product_id
       LEFT JOIN inventory_batches ib ON ib.id = sm.batch_id
@@ -25,24 +23,35 @@ const getStockMovements = async (req, res, next) => {
       conditions.push(`sm.movement_type = $${params.length}`);
     }
 
-    if (from_date) {
-      params.push(from_date);
-      conditions.push(`sm.created_at >= $${params.length}`);
+    // Default to today if no date filters provided
+    const effectiveFromDate = from_date || to_date ? from_date : new Date().toISOString().split('T')[0];
+    const effectiveToDate = from_date || to_date ? to_date : new Date().toISOString().split('T')[0];
+
+    if (effectiveFromDate) {
+      params.push(effectiveFromDate);
+      conditions.push(`sm.created_at >= $${params.length}::date`);
     }
 
-    if (to_date) {
-      params.push(to_date);
+    if (effectiveToDate) {
+      params.push(effectiveToDate);
       conditions.push(`sm.created_at < ($${params.length}::date + interval '1 day')`);
     }
 
-    if (conditions.length > 0) {
-      query += ` WHERE ` + conditions.join(' AND ');
-    }
+    const whereClause = conditions.length > 0 ? ` WHERE ` + conditions.join(' AND ') : '';
 
-    query += ` ORDER BY sm.created_at DESC`;
+    // Get total count
+    const countResult = await pool.query(`SELECT COUNT(*) ${baseFrom}${whereClause}`, params);
+    const total = parseInt(countResult.rows[0].count, 10);
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    // Get paginated data
+    const offset = (Number(page) - 1) * Number(limit);
+    params.push(Number(limit));
+    params.push(offset);
+    const selectFields = `sm.*, p.product_name, ib.batch_number, CASE WHEN sm.reference_type = 'ORDER' THEN o.invoice_number ELSE NULL END AS invoice_number`;
+    const dataQuery = `SELECT ${selectFields} ${baseFrom}${whereClause} ORDER BY sm.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
+
+    const result = await pool.query(dataQuery, params);
+    res.json({ data: result.rows, total, page: Number(page), limit: Number(limit) });
   } catch (err) {
     next(err);
   }

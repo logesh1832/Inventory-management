@@ -153,23 +153,45 @@ const createBulkBatches = async (req, res, next) => {
 // GET /api/batches — list batches (master records)
 const getAllBatches = async (req, res, next) => {
   try {
-    const { product_id } = req.query;
-    let query = `
-      SELECT b.*, p.product_name
+    const { product_id, from_date, to_date, page = 1, limit = 20 } = req.query;
+
+    const baseFrom = `
       FROM inventory_batches b
       JOIN products p ON p.id = b.product_id
     `;
+    const conditions = [];
     const params = [];
 
     if (product_id) {
       params.push(product_id);
-      query += ` WHERE b.product_id = $1`;
+      conditions.push(`b.product_id = $${params.length}`);
     }
 
-    query += ` ORDER BY b.received_date DESC`;
+    // Default to today if no date filters provided
+    const effectiveFromDate = from_date || to_date ? from_date : new Date().toISOString().split('T')[0];
+    const effectiveToDate = from_date || to_date ? to_date : new Date().toISOString().split('T')[0];
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    if (effectiveFromDate) {
+      params.push(effectiveFromDate);
+      conditions.push(`b.received_date >= $${params.length}`);
+    }
+    if (effectiveToDate) {
+      params.push(effectiveToDate);
+      conditions.push(`b.received_date <= $${params.length}`);
+    }
+
+    const whereClause = conditions.length > 0 ? ' WHERE ' + conditions.join(' AND ') : '';
+
+    const countResult = await pool.query(`SELECT COUNT(*) ${baseFrom}${whereClause}`, params);
+    const total = parseInt(countResult.rows[0].count, 10);
+
+    const offset = (Number(page) - 1) * Number(limit);
+    params.push(Number(limit));
+    params.push(offset);
+    const dataQuery = `SELECT b.*, p.product_name ${baseFrom}${whereClause} ORDER BY b.received_date DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
+
+    const result = await pool.query(dataQuery, params);
+    res.json({ data: result.rows, total, page: Number(page), limit: Number(limit) });
   } catch (err) {
     next(err);
   }
@@ -178,9 +200,16 @@ const getAllBatches = async (req, res, next) => {
 // GET /api/batches/stock-entries — list all IN movements with supplier info
 const getStockEntries = async (req, res, next) => {
   try {
-    const { product_id, supplier_id } = req.query;
-    const params = [];
+    const { product_id, supplier_id, from_date, to_date, page = 1, limit = 20 } = req.query;
+
+    const baseFrom = `
+      FROM stock_movements sm
+      JOIN products p ON p.id = sm.product_id
+      LEFT JOIN inventory_batches ib ON ib.id = sm.batch_id
+      LEFT JOIN customers c ON c.id = sm.supplier_id
+    `;
     const conditions = ["sm.movement_type = 'IN'"];
+    const params = [];
 
     if (product_id) {
       params.push(product_id);
@@ -191,21 +220,35 @@ const getStockEntries = async (req, res, next) => {
       conditions.push(`sm.supplier_id = $${params.length}`);
     }
 
-    const query = `
-      SELECT sm.id, sm.quantity, sm.created_at, sm.received_date,
+    // Default to today if no date filters provided
+    const effectiveFromDate = from_date || to_date ? from_date : new Date().toISOString().split('T')[0];
+    const effectiveToDate = from_date || to_date ? to_date : new Date().toISOString().split('T')[0];
+
+    if (effectiveFromDate) {
+      params.push(effectiveFromDate);
+      conditions.push(`sm.created_at >= $${params.length}::date`);
+    }
+    if (effectiveToDate) {
+      params.push(effectiveToDate);
+      conditions.push(`sm.created_at < ($${params.length}::date + interval '1 day')`);
+    }
+
+    const whereClause = ' WHERE ' + conditions.join(' AND ');
+
+    const countResult = await pool.query(`SELECT COUNT(*) ${baseFrom}${whereClause}`, params);
+    const total = parseInt(countResult.rows[0].count, 10);
+
+    const offset = (Number(page) - 1) * Number(limit);
+    params.push(Number(limit));
+    params.push(offset);
+    const selectFields = `sm.id, sm.quantity, sm.created_at, sm.received_date,
              p.product_name, p.product_code, p.batch_tracking,
              ib.batch_number, ib.quantity_remaining, ib.manufacture_date, ib.expiry_date,
-             c.customer_name AS supplier_name
-      FROM stock_movements sm
-      JOIN products p ON p.id = sm.product_id
-      LEFT JOIN inventory_batches ib ON ib.id = sm.batch_id
-      LEFT JOIN customers c ON c.id = sm.supplier_id
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY sm.created_at DESC
-    `;
+             c.customer_name AS supplier_name`;
+    const dataQuery = `SELECT ${selectFields} ${baseFrom}${whereClause} ORDER BY sm.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    const result = await pool.query(dataQuery, params);
+    res.json({ data: result.rows, total, page: Number(page), limit: Number(limit) });
   } catch (err) {
     next(err);
   }

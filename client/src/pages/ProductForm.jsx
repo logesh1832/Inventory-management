@@ -19,6 +19,7 @@ export default function ProductForm() {
     unit_price: '',
     category: '',
     batch_tracking: false,
+    qty_per_box: '',
   });
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [errors, setErrors] = useState({});
@@ -44,6 +45,7 @@ export default function ProductForm() {
             unit_price: data.unit_price || '',
             category: data.category || '',
             batch_tracking: data.batch_tracking || false,
+            qty_per_box: data.qty_per_box || '',
           });
         })
         .catch(() => showToast('Failed to load product', 'error'))
@@ -61,6 +63,9 @@ export default function ProductForm() {
     if (!form.product_name.trim()) newErrors.product_name = 'Product name is required';
     if (!form.product_code.trim()) newErrors.product_code = 'Product code is required';
     if (!form.unit) newErrors.unit = 'Unit is required';
+    if (form.unit === 'Boxes' && (!form.qty_per_box || Number(form.qty_per_box) <= 0)) {
+      newErrors.qty_per_box = 'Quantity per box is required';
+    }
     if (form.unit_price !== '' && (isNaN(form.unit_price) || Number(form.unit_price) < 0)) {
       newErrors.unit_price = 'Price must be a positive number';
     }
@@ -89,6 +94,7 @@ export default function ProductForm() {
         unit_price: form.unit_price ? Number(form.unit_price) : 0,
         category: form.category || null,
         batch_tracking: form.batch_tracking,
+        qty_per_box: form.unit === 'Boxes' ? Number(form.qty_per_box) || null : null,
       };
 
       if (isEdit) {
@@ -198,6 +204,26 @@ export default function ProductForm() {
             ))}
           </select>
         </div>
+
+        {/* Qty per Box (only for Boxes unit) */}
+        {form.unit === 'Boxes' && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Qty per Box <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              name="qty_per_box"
+              value={form.qty_per_box}
+              onChange={handleChange}
+              min="1"
+              placeholder="e.g. 12"
+              className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 ${errors.qty_per_box ? 'border-red-500' : 'border-gray-300'}`}
+            />
+            <p className="text-gray-400 text-xs mt-1">How many pieces/items in each box</p>
+            {errors.qty_per_box && <p className="text-red-500 text-xs mt-1">{errors.qty_per_box}</p>}
+          </div>
+        )}
 
         {/* Batch Tracking Toggle */}
         <div className="mb-4 border-t border-gray-100 pt-4">

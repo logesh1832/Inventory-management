@@ -175,10 +175,9 @@ const createOrder = async (req, res, next) => {
 
 const getAllOrders = async (req, res, next) => {
   try {
-    const { customer_id, status, from_date, to_date } = req.query;
+    const { customer_id, status, from_date, to_date, page = 1, limit = 20 } = req.query;
 
-    let query = `
-      SELECT o.*, c.customer_name
+    const baseFrom = `
       FROM orders o
       JOIN customers c ON c.id = o.customer_id
     `;
@@ -193,23 +192,34 @@ const getAllOrders = async (req, res, next) => {
       params.push(status);
       conditions.push(`o.status = $${params.length}`);
     }
-    if (from_date) {
-      params.push(from_date);
+
+    // Default to today if no date filters provided
+    const effectiveFromDate = from_date || to_date ? from_date : new Date().toISOString().split('T')[0];
+    const effectiveToDate = from_date || to_date ? to_date : new Date().toISOString().split('T')[0];
+
+    if (effectiveFromDate) {
+      params.push(effectiveFromDate);
       conditions.push(`o.order_date >= $${params.length}`);
     }
-    if (to_date) {
-      params.push(to_date);
+    if (effectiveToDate) {
+      params.push(effectiveToDate);
       conditions.push(`o.order_date <= $${params.length}`);
     }
 
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
+    const whereClause = conditions.length > 0 ? ' WHERE ' + conditions.join(' AND ') : '';
 
-    query += ' ORDER BY o.order_date DESC, o.created_at DESC';
+    // Get total count
+    const countResult = await pool.query(`SELECT COUNT(*) ${baseFrom}${whereClause}`, params);
+    const total = parseInt(countResult.rows[0].count, 10);
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    // Get paginated data
+    const offset = (Number(page) - 1) * Number(limit);
+    params.push(Number(limit));
+    params.push(offset);
+    const dataQuery = `SELECT o.*, c.customer_name ${baseFrom}${whereClause} ORDER BY o.order_date DESC, o.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
+
+    const result = await pool.query(dataQuery, params);
+    res.json({ data: result.rows, total, page: Number(page), limit: Number(limit) });
   } catch (err) {
     next(err);
   }

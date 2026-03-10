@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS products (
     product_name VARCHAR(255) NOT NULL,
     product_code VARCHAR(100) NOT NULL UNIQUE,
     unit VARCHAR(50) NOT NULL DEFAULT 'pcs',
+    qty_per_box INTEGER DEFAULT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'active',
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );

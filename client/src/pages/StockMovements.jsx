@@ -2,13 +2,20 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
+import Pagination from '../components/Pagination';
+
+const today = () => new Date().toISOString().split('T')[0];
 
 export default function StockMovements() {
   const [movements, setMovements] = useState([]);
+  const [total, setTotal] = useState(0);
   const [products, setProducts] = useState([]);
   const [filterProductId, setFilterProductId] = useState('');
   const [filterType, setFilterType] = useState('');
+  const [fromDate, setFromDate] = useState(today());
+  const [toDate, setToDate] = useState(today());
   const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const navigate = useNavigate();
@@ -18,14 +25,17 @@ export default function StockMovements() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const fetchMovements = async (productId, movementType) => {
+  const fetchMovements = async (productId, movementType, fd, td, pg) => {
     try {
       setLoading(true);
-      const params = {};
+      const params = { page: pg, limit: 20 };
       if (productId) params.product_id = productId;
       if (movementType) params.movement_type = movementType;
+      if (fd) params.from_date = fd;
+      if (td) params.to_date = td;
       const res = await api.get('/inventory', { params });
-      setMovements(res.data);
+      setMovements(res.data.data);
+      setTotal(res.data.total);
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to load stock movements', 'error');
     } finally {
@@ -35,18 +45,39 @@ export default function StockMovements() {
 
   useEffect(() => {
     api.get('/products').then((res) => setProducts(res.data)).catch(() => {});
-    fetchMovements('', '');
+    fetchMovements('', '', fromDate, toDate, 1);
   }, []);
 
   const handleProductFilter = (val) => {
     setFilterProductId(val);
-    fetchMovements(val, filterType);
+    setPage(1);
+    fetchMovements(val, filterType, fromDate, toDate, 1);
   };
 
   const handleTypeFilter = (e) => {
     const val = e.target.value;
     setFilterType(val);
-    fetchMovements(filterProductId, val);
+    setPage(1);
+    fetchMovements(filterProductId, val, fromDate, toDate, 1);
+  };
+
+  const handleFromDate = (e) => {
+    const val = e.target.value;
+    setFromDate(val);
+    setPage(1);
+    fetchMovements(filterProductId, filterType, val, toDate, 1);
+  };
+
+  const handleToDate = (e) => {
+    const val = e.target.value;
+    setToDate(val);
+    setPage(1);
+    fetchMovements(filterProductId, filterType, fromDate, val, 1);
+  };
+
+  const handlePageChange = (pg) => {
+    setPage(pg);
+    fetchMovements(filterProductId, filterType, fromDate, toDate, pg);
   };
 
   return (
@@ -84,6 +115,24 @@ export default function StockMovements() {
             <option value="IN">IN</option>
             <option value="OUT">OUT</option>
           </select>
+        </div>
+        <div className="w-full sm:w-auto">
+          <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+          <input
+            type="date"
+            value={fromDate}
+            onChange={handleFromDate}
+            className="border border-gray-300 rounded px-3 py-2 w-full sm:w-40"
+          />
+        </div>
+        <div className="w-full sm:w-auto">
+          <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+          <input
+            type="date"
+            value={toDate}
+            onChange={handleToDate}
+            className="border border-gray-300 rounded px-3 py-2 w-full sm:w-40"
+          />
         </div>
         <div className="w-full sm:w-64 sm:ml-auto">
           <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
@@ -211,6 +260,8 @@ export default function StockMovements() {
               </tbody>
             </table>
           </div>
+
+          <Pagination page={page} total={total} limit={20} onPageChange={handlePageChange} />
         </>
         );
       })()}
