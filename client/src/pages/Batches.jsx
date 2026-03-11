@@ -5,6 +5,7 @@ import SearchableSelect from '../components/SearchableSelect';
 import Pagination from '../components/Pagination';
 
 const today = () => new Date().toISOString().split('T')[0];
+const toDateStr = (d) => d ? new Date(d).toISOString().split('T')[0] : '';
 
 export default function Batches() {
   const navigate = useNavigate();
@@ -21,6 +22,12 @@ export default function Batches() {
   const [toDate, setToDate] = useState(today());
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
     api.get('/products').then((res) => setProducts(res.data)).catch(() => {});
@@ -31,11 +38,10 @@ export default function Batches() {
     setLoading(true);
     if (currentTab === 'entries') {
       const params = { page: pg, limit: 20 };
-      if (productId) params.product_id = productId;
       if (supplierId) params.supplier_id = supplierId;
       if (fd) params.from_date = fd;
       if (td) params.to_date = td;
-      api.get('/batches/stock-entries', { params })
+      api.get('/batches/stock-entry-groups', { params })
         .then((res) => { setEntries(res.data.data); setEntriesTotal(res.data.total); })
         .catch(() => {})
         .finally(() => setLoading(false));
@@ -54,6 +60,7 @@ export default function Batches() {
   useEffect(() => {
     setPage(1);
     fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, 1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, filterProductId, filterSupplierId, fromDate, toDate]);
 
   const handlePageChange = (pg) => {
@@ -61,8 +68,29 @@ export default function Batches() {
     fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, pg);
   };
 
+  const handleDeleteGroup = async (supplierId, receivedDate, supplierName) => {
+    if (!window.confirm(`Are you sure you want to delete ALL stock entries from ${supplierName} on ${new Date(receivedDate).toLocaleDateString()}? This will reverse batch quantities.`)) return;
+    try {
+      await api.delete('/batches/stock-entry-group', { params: { supplier_id: supplierId, date: receivedDate } });
+      showToast('Stock entries deleted successfully');
+      fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, page);
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to delete stock entries', 'error');
+    }
+  };
+
   return (
     <div>
+      {toast && (
+        <div
+          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded shadow-lg text-white ${
+            toast.type === 'error' ? 'bg-red-500' : 'bg-green-500'
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h2 className="text-2xl font-bold text-gray-800">Material In</h2>
         <Link
@@ -95,15 +123,17 @@ export default function Batches() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4 items-end">
-        <div className="w-full sm:w-56">
-          <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
-          <SearchableSelect
-            options={products.map((p) => ({ value: p.id, label: p.product_name, sublabel: p.product_code }))}
-            value={filterProductId}
-            onChange={setFilterProductId}
-            placeholder="All Products"
-          />
-        </div>
+        {tab === 'batches' && (
+          <div className="w-full sm:w-56">
+            <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
+            <SearchableSelect
+              options={products.map((p) => ({ value: p.id, label: p.product_name, sublabel: p.product_code }))}
+              value={filterProductId}
+              onChange={setFilterProductId}
+              placeholder="All Products"
+            />
+          </div>
+        )}
         {tab === 'entries' && (
           <div className="w-full sm:w-56">
             <label className="block text-xs font-medium text-gray-500 mb-1">Supplier</label>
@@ -143,108 +173,93 @@ export default function Batches() {
           <p className="text-gray-500">No stock entries found.</p>
         ) : (
           <>
-          {/* Mobile cards - entries */}
+          {/* Mobile cards - supplier groups */}
           <div className="md:hidden space-y-3">
-            {entries.map((e) => (
-              <div key={e.id} className="bg-white rounded-lg shadow p-4 space-y-2">
+            {entries.map((g) => (
+              <div
+                key={`${g.supplier_id}-${g.received_date}`}
+                className="bg-white rounded-lg shadow p-4 space-y-2 cursor-pointer active:bg-gray-50"
+                onClick={() => navigate(`/batches/view?supplier=${g.supplier_id}&date=${toDateStr(g.received_date)}`)}
+              >
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-gray-900">{e.product_name}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-semibold">
-                      +{e.quantity}
-                    </span>
-                    <button
-                      onClick={() => navigate(`/batches/stock-entries/${e.id}/edit`)}
-                      className="text-blue-600 hover:text-blue-800 text-xs font-medium"
-                    >
-                      Edit
-                    </button>
-                  </div>
+                  <span className="font-medium text-gray-900">{g.supplier_name}</span>
+                  <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-semibold">
+                    +{g.total_quantity}
+                  </span>
                 </div>
                 <div className="text-sm text-gray-500">
                   <span className="text-gray-400">Date:</span>{' '}
-                  {e.received_date
-                    ? new Date(e.received_date).toLocaleDateString()
-                    : new Date(e.created_at).toLocaleDateString()}
+                  {new Date(g.received_date).toLocaleDateString()}
                 </div>
                 <div className="text-sm text-gray-500">
-                  <span className="text-gray-400">Supplier:</span> {e.supplier_name || '-'}
+                  <span className="text-gray-400">Items:</span> {g.item_count} products
                 </div>
-                <div className="text-sm text-gray-500">
-                  <span className="text-gray-400">Batch:</span>{' '}
-                  {e.batch_number ? (
-                    <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">{e.batch_number}</span>
-                  ) : (
-                    <span className="text-gray-400">No Batch</span>
-                  )}
+                <div className="flex gap-3 mt-1">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); navigate(`/batches/stock-entries/${g.first_entry_id}/edit`); }}
+                    className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteGroup(g.supplier_id, g.received_date, g.supplier_name); }}
+                    className="text-red-600 hover:text-red-800 text-xs font-medium"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Desktop table - entries */}
+          {/* Desktop table - supplier groups */}
           <div className="hidden md:block overflow-x-auto bg-white rounded-lg shadow">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mfg / Expiry</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty Received</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Qty</th>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {entries.map((e) => (
-                  <tr key={e.id} className="hover:bg-gray-50">
+                {entries.map((g) => (
+                  <tr
+                    key={`${g.supplier_id}-${g.received_date}`}
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() => navigate(`/batches/view?supplier=${g.supplier_id}&date=${toDateStr(g.received_date)}`)}
+                  >
                     <td className="px-5 py-3 text-sm text-gray-700 whitespace-nowrap">
-                      {e.received_date
-                        ? new Date(e.received_date).toLocaleDateString()
-                        : new Date(e.created_at).toLocaleDateString()}
+                      {new Date(g.received_date).toLocaleDateString()}
                     </td>
-                    <td className="px-5 py-3 text-sm text-gray-700">{e.supplier_name || '-'}</td>
-                    <td className="px-5 py-3 text-sm text-gray-700">
-                      <span>{e.product_name}</span>
-                      <span className="text-gray-400 text-xs ml-1">({e.product_code})</span>
-                    </td>
+                    <td className="px-5 py-3 text-sm font-medium text-gray-800">{g.supplier_name}</td>
                     <td className="px-5 py-3 text-sm">
-                      {e.batch_number ? (
-                        <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
-                          {e.batch_number}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400 text-xs">No Batch</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-sm text-gray-500 whitespace-nowrap">
-                      {e.manufacture_date || e.expiry_date ? (
-                        <span className="text-xs">
-                          {e.manufacture_date ? new Date(e.manufacture_date).toLocaleDateString() : '-'}
-                          {' / '}
-                          {e.expiry_date ? (
-                            <span className={new Date(e.expiry_date) < new Date() ? 'text-red-600 font-medium' : ''}>
-                              {new Date(e.expiry_date).toLocaleDateString()}
-                            </span>
-                          ) : '-'}
-                        </span>
-                      ) : (
-                        <span className="text-gray-300">-</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-sm">
-                      <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-semibold">
-                        +{e.quantity}
+                      <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
+                        {g.item_count} products
                       </span>
                     </td>
                     <td className="px-5 py-3 text-sm">
-                      <button
-                        onClick={() => navigate(`/batches/stock-entries/${e.id}/edit`)}
-                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                      >
-                        Edit
-                      </button>
+                      <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-semibold">
+                        +{g.total_quantity}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-sm">
+                      <div className="flex gap-3">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); navigate(`/batches/stock-entries/${g.first_entry_id}/edit`); }}
+                          className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteGroup(g.supplier_id, g.received_date, g.supplier_name); }}
+                          className="text-red-600 hover:text-red-800 text-sm font-medium"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

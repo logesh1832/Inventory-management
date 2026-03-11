@@ -150,6 +150,42 @@ export default function StockEntryEdit() {
     }
   };
 
+  const handleProductChange = async (rowId, productId) => {
+    const product = products.find((p) => p.id === productId);
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== rowId) return r;
+        return {
+          ...r,
+          product_id: productId,
+          product_name: product?.product_name || '',
+          product_code: product?.product_code || '',
+          batch_tracking: product?.batch_tracking || false,
+          batchMode: 'current',
+          existing_batch_id: '',
+          batch_number: '',
+          manufacture_date: '',
+          expiry_date: '',
+          productBatches: [],
+        };
+      })
+    );
+
+    if (!productId) return;
+
+    if (product?.batch_tracking) {
+      try {
+        const { data } = await api.get(`/batches/product/${productId}`);
+        setRows((prev) =>
+          prev.map((r) => {
+            if (r.id !== rowId) return r;
+            return { ...r, productBatches: data.filter((b) => b.batch_number && b.id !== r.batch_id) };
+          })
+        );
+      } catch {}
+    }
+  };
+
   const validate = () => {
     const newErrors = {};
     if (!supplierId) newErrors.supplier = 'Supplier is required';
@@ -157,6 +193,7 @@ export default function StockEntryEdit() {
 
     rows.forEach((row) => {
       const rowErrors = [];
+      if (!row.product_id) rowErrors.push('Select a product');
       if (!row.quantity || Number(row.quantity) <= 0) rowErrors.push('Enter quantity');
       if (row.batchMode === 'existing' && !row.existing_batch_id) rowErrors.push('Select a batch');
       if (rowErrors.length > 0) newErrors[row.id] = rowErrors.join(', ');
@@ -175,6 +212,7 @@ export default function StockEntryEdit() {
       // Update each entry individually
       for (const row of rows) {
         const payload = {
+          product_id: row.product_id,
           quantity: Number(row.quantity),
           supplier_id: supplierId || null,
           received_date: receivedDate || null,
@@ -355,13 +393,17 @@ export default function StockEntryEdit() {
                   <span className="text-xs font-semibold text-gray-400">ITEM {idx + 1}</span>
                 </div>
 
-                {/* Product (read-only) + Quantity */}
+                {/* Product + Quantity */}
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 mb-3">
                   <div className="sm:col-span-8" data-row-product={row.id}>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
-                    <p className="text-sm text-gray-800 bg-gray-50 rounded px-3 py-1.5 border border-gray-200">
-                      {row.product_name} <span className="text-gray-400">({row.product_code})</span>
-                    </p>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Product <span className="text-red-500">*</span></label>
+                    <SearchableSelect
+                      options={products.map((p) => ({ value: p.id, label: `${p.product_name} (${p.product_code})${p.batch_tracking ? ' [BT]' : ''}` }))}
+                      value={row.product_id}
+                      onChange={(val) => handleProductChange(row.id, val)}
+                      placeholder="Select product..."
+                      autoFocusNext={{ current: qtyRefs.current[row.id] }}
+                    />
                   </div>
                   <div className="sm:col-span-4">
                     <label className="block text-xs font-medium text-gray-500 mb-1">Quantity <span className="text-red-500">*</span></label>

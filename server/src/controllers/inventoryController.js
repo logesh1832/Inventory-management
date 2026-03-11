@@ -2,7 +2,7 @@ const pool = require('../config/db');
 
 const getStockMovements = async (req, res, next) => {
   try {
-    const { product_id, movement_type, from_date, to_date, page = 1, limit = 20 } = req.query;
+    const { product_id, movement_type, from_date, to_date, search, page = 1, limit = 20 } = req.query;
 
     const baseFrom = `
       FROM stock_movements sm
@@ -21,6 +21,12 @@ const getStockMovements = async (req, res, next) => {
     if (movement_type) {
       params.push(movement_type);
       conditions.push(`sm.movement_type = $${params.length}`);
+    }
+
+    if (search && search.trim()) {
+      params.push(`%${search.trim()}%`);
+      const idx = params.length;
+      conditions.push(`(p.product_name ILIKE $${idx} OR ib.batch_number ILIKE $${idx} OR o.invoice_number ILIKE $${idx} OR sm.movement_type ILIKE $${idx})`);
     }
 
     // Default to today if no date filters provided
@@ -191,4 +197,199 @@ const getDashboardStats = async (req, res, next) => {
   }
 };
 
-module.exports = { getStockMovements, getLiveStock, getLiveStockByProduct, getStockReport, getDashboardStats };
+const getMovementsBySupplier = async (req, res, next) => {
+  try {
+    const { supplier_id, from_date, to_date, page = 1, limit = 20 } = req.query;
+
+    const baseFrom = `
+      FROM stock_movements sm
+      LEFT JOIN customers c ON c.id = sm.supplier_id
+      WHERE sm.movement_type = 'IN'
+    `;
+    const conditions = [];
+    const params = [];
+
+    if (supplier_id) {
+      params.push(supplier_id);
+      conditions.push(`sm.supplier_id = $${params.length}`);
+    }
+
+    if (from_date) {
+      params.push(from_date);
+      conditions.push(`sm.received_date >= $${params.length}::date`);
+    }
+
+    if (to_date) {
+      params.push(to_date);
+      conditions.push(`sm.received_date <= $${params.length}::date`);
+    }
+
+    const whereClause = conditions.length > 0 ? ' AND ' + conditions.join(' AND ') : '';
+
+    // Get total count
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM (SELECT supplier_id, received_date ${baseFrom}${whereClause} GROUP BY supplier_id, received_date) sub`,
+      params
+    );
+    const total = parseInt(countResult.rows[0].count, 10);
+
+    // Get paginated data
+    const offset = (Number(page) - 1) * Number(limit);
+    params.push(Number(limit));
+    params.push(offset);
+
+    const dataQuery = `
+      SELECT
+        sm.supplier_id,
+        TO_CHAR(sm.received_date, 'YYYY-MM-DD') AS received_date,
+        c.customer_name AS supplier_name,
+        COUNT(*) AS item_count,
+        SUM(sm.quantity) AS total_quantity
+      ${baseFrom}${whereClause}
+      GROUP BY sm.supplier_id, sm.received_date, c.customer_name
+      ORDER BY sm.received_date DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}
+    `;
+
+    const result = await pool.query(dataQuery, params);
+    res.json({ data: result.rows, total, page: Number(page), limit: Number(limit) });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getMovementsByCustomer = async (req, res, next) => {
+  try {
+    const { customer_id, from_date, to_date, page = 1, limit = 20 } = req.query;
+
+    const baseFrom = `
+      FROM stock_movements sm
+      JOIN orders o ON sm.reference_id = o.id AND sm.reference_type = 'ORDER'
+      JOIN customers c ON c.id = o.customer_id
+      WHERE sm.movement_type = 'OUT'
+    `;
+    const conditions = [];
+    const params = [];
+
+    if (customer_id) {
+      params.push(customer_id);
+      conditions.push(`o.customer_id = $${params.length}`);
+    }
+
+    if (from_date) {
+      params.push(from_date);
+      conditions.push(`o.order_date >= $${params.length}::date`);
+    }
+
+    if (to_date) {
+      params.push(to_date);
+      conditions.push(`o.order_date <= $${params.length}::date`);
+    }
+
+    const whereClause = conditions.length > 0 ? ' AND ' + conditions.join(' AND ') : '';
+
+    // Get total count
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM (SELECT o.id ${baseFrom}${whereClause} GROUP BY o.id) sub`,
+      params
+    );
+    const total = parseInt(countResult.rows[0].count, 10);
+
+    // Get paginated data
+    const offset = (Number(page) - 1) * Number(limit);
+    params.push(Number(limit));
+    params.push(offset);
+
+    const dataQuery = `
+      SELECT
+        o.id AS order_id,
+        o.invoice_number,
+        TO_CHAR(o.order_date, 'YYYY-MM-DD') AS order_date,
+        c.customer_name,
+        COUNT(DISTINCT sm.product_id) AS item_count,
+        SUM(sm.quantity) AS total_quantity
+      ${baseFrom}${whereClause}
+      GROUP BY o.id, o.invoice_number, o.order_date, c.customer_name
+      ORDER BY o.order_date DESC, o.created_at DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}
+    `;
+
+    const result = await pool.query(dataQuery, params);
+    res.json({ data: result.rows, total, page: Number(page), limit: Number(limit) });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getProductMovements = async (req, res, next) => {
+  try {
+    const { product_id } = req.params;
+    const { from_date, to_date, movement_type, page = 1, limit = 20 } = req.query;
+
+    const baseFrom = `
+      FROM stock_movements sm
+      JOIN products p ON p.id = sm.product_id
+      LEFT JOIN inventory_batches ib ON ib.id = sm.batch_id
+      LEFT JOIN customers c_supplier ON c_supplier.id = sm.supplier_id
+      LEFT JOIN orders o ON sm.reference_type = 'ORDER' AND o.id = sm.reference_id
+      LEFT JOIN customers c_order ON c_order.id = o.customer_id
+      WHERE sm.product_id = $1
+    `;
+    const conditions = [];
+    const params = [product_id];
+
+    if (from_date) {
+      params.push(from_date);
+      conditions.push(`sm.created_at >= $${params.length}::date`);
+    }
+
+    if (to_date) {
+      params.push(to_date);
+      conditions.push(`sm.created_at < ($${params.length}::date + interval '1 day')`);
+    }
+
+    if (movement_type) {
+      params.push(movement_type);
+      conditions.push(`sm.movement_type = $${params.length}`);
+    }
+
+    const whereClause = conditions.length > 0 ? ' AND ' + conditions.join(' AND ') : '';
+
+    // Get total count + aggregated totals
+    const countResult = await pool.query(
+      `SELECT COUNT(*) AS count,
+              COALESCE(SUM(CASE WHEN sm.movement_type = 'IN' THEN sm.quantity ELSE 0 END), 0)::int AS total_in,
+              COALESCE(SUM(CASE WHEN sm.movement_type = 'OUT' THEN sm.quantity ELSE 0 END), 0)::int AS total_out
+       ${baseFrom}${whereClause}`,
+      params
+    );
+    const { count, total_in, total_out } = countResult.rows[0];
+    const total = parseInt(count, 10);
+
+    // Get paginated data
+    const offset = (Number(page) - 1) * Number(limit);
+    params.push(Number(limit));
+    params.push(offset);
+
+    const dataQuery = `
+      SELECT
+        sm.*,
+        p.product_name,
+        p.product_code,
+        ib.batch_number,
+        c_supplier.customer_name AS supplier_name,
+        o.invoice_number,
+        c_order.customer_name AS customer_name
+      ${baseFrom}${whereClause}
+      ORDER BY sm.created_at DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}
+    `;
+
+    const result = await pool.query(dataQuery, params);
+    res.json({ data: result.rows, total, total_in, total_out, page: Number(page), limit: Number(limit) });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { getStockMovements, getLiveStock, getLiveStockByProduct, getStockReport, getDashboardStats, getMovementsBySupplier, getMovementsByCustomer, getProductMovements };

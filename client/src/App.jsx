@@ -15,8 +15,11 @@ import Orders from './pages/Orders';
 import OrderForm from './pages/OrderForm';
 import OrderDetail from './pages/OrderDetail';
 import Categories from './pages/Categories';
+import MaterialInDetail from './pages/MaterialInDetail';
 import StockReport from './pages/StockReport';
 import StockMovements from './pages/StockMovements';
+import ProductReport from './pages/ProductReport';
+import ProductMovementDetail from './pages/ProductMovementDetail';
 import UserManagement from './pages/UserManagement';
 
 function App() {
@@ -39,6 +42,7 @@ function App() {
               <Route path="/customers/new" element={<CustomerForm />} />
               <Route path="/customers/:id/edit" element={<CustomerForm />} />
               <Route path="/batches" element={<Batches />} />
+              <Route path="/batches/view" element={<MaterialInDetail />} />
               <Route path="/batches/new" element={<BatchForm />} />
               <Route path="/batches/stock-entries/:id/edit" element={<StockEntryEdit />} />
               <Route path="/orders/new" element={<OrderForm />} />
@@ -47,6 +51,8 @@ function App() {
               <Route path="/orders" element={<Orders />} />
               <Route path="/stock-movements" element={<StockMovements />} />
               <Route path="/stock-report" element={<StockReport />} />
+              <Route path="/product-report" element={<ProductReport />} />
+              <Route path="/product-report/:id" element={<ProductMovementDetail />} />
 
               {/* Admin-only route */}
               <Route element={<ProtectedRoute roles={['admin']} />}>

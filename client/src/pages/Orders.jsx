@@ -60,6 +60,17 @@ export default function Orders() {
     fetchOrders(filters, pg);
   };
 
+  const handleDeleteOrder = async (orderId, invoiceNumber) => {
+    if (!window.confirm(`Are you sure you want to delete order ${invoiceNumber}? This will reverse all stock movements.`)) return;
+    try {
+      await api.delete(`/orders/${orderId}`);
+      showToast('Order deleted successfully');
+      fetchOrders(filters, page);
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to delete order', 'error');
+    }
+  };
+
   return (
     <div>
       {toast && (
@@ -160,12 +171,20 @@ export default function Orders() {
                 <div className="text-sm text-gray-500">
                   <span className="text-gray-400">Date:</span> {new Date(o.order_date).toLocaleDateString()}
                 </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); navigate(`/orders/${o.id}/edit`); }}
-                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                >
-                  Edit
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); navigate(`/orders/${o.id}/edit`); }}
+                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteOrder(o.id, o.invoice_number); }}
+                    className="text-red-600 hover:text-red-800 text-sm font-medium"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -207,12 +226,20 @@ export default function Orders() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); navigate(`/orders/${o.id}/edit`); }}
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                    >
-                      Edit
-                    </button>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); navigate(`/orders/${o.id}/edit`); }}
+                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteOrder(o.id, o.invoice_number); }}
+                        className="text-red-600 hover:text-red-800 text-sm font-medium"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

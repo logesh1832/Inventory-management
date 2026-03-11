@@ -473,4 +473,56 @@ const updateOrder = async (req, res, next) => {
   }
 };
 
-module.exports = { createOrder, getAllOrders, getOrderById, updateOrder };
+// DELETE /api/orders/:id — delete an order and reverse stock movements
+const deleteOrder = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Check order exists
+      const orderCheck = await client.query('SELECT * FROM orders WHERE id = $1 FOR UPDATE', [id]);
+      if (orderCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Order not found' });
+      }
+
+      // 1. Get all OUT stock movements for this order
+      const movements = await client.query(
+        "SELECT * FROM stock_movements WHERE reference_type = 'ORDER' AND reference_id = $1 AND movement_type = 'OUT'",
+        [id]
+      );
+
+      // 2. Reverse each movement — add quantity back to batch
+      for (const mov of movements.rows) {
+        await client.query(
+          'UPDATE inventory_batches SET quantity_remaining = quantity_remaining + $1 WHERE id = $2',
+          [mov.quantity, mov.batch_id]
+        );
+      }
+
+      // 3. Delete all stock movements for this order
+      await client.query("DELETE FROM stock_movements WHERE reference_type = 'ORDER' AND reference_id = $1", [id]);
+
+      // 4. Delete all order items
+      await client.query('DELETE FROM order_items WHERE order_id = $1', [id]);
+
+      // 5. Delete the order
+      await client.query('DELETE FROM orders WHERE id = $1', [id]);
+
+      await client.query('COMMIT');
+      res.json({ message: 'Order deleted successfully' });
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { createOrder, getAllOrders, getOrderById, updateOrder, deleteOrder };

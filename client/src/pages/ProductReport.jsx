@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const stockBadge = (qty) => {
   if (qty < 50) return 'bg-red-100 text-red-700';
@@ -9,88 +8,33 @@ const stockBadge = (qty) => {
   return 'bg-green-100 text-green-700';
 };
 
-const barColor = (qty) => {
-  if (qty < 50) return '#ef4444';
-  if (qty <= 200) return '#eab308';
-  return '#22c55e';
-};
-
-export default function StockReport() {
+export default function ProductReport() {
   const navigate = useNavigate();
   const [stock, setStock] = useState([]);
-  const [lowStockOnly, setLowStockOnly] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
-
-  const fetchStock = async (lowStock) => {
-    try {
-      setLoading(true);
-      const params = {};
-      if (lowStock) params.low_stock_threshold = 50;
-      const res = await api.get('/inventory/stock-report', { params });
-      setStock(res.data);
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    fetchStock(false);
+    api.get('/inventory/stock-report')
+      .then((res) => setStock(res.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
-
-  const handleLowStockToggle = () => {
-    const next = !lowStockOnly;
-    setLowStockOnly(next);
-    fetchStock(next);
-  };
 
   const term = searchTerm.toLowerCase().trim();
   const filtered = term
-    ? stock.filter((p) => (p.product_name || '').toLowerCase().includes(term) || (p.product_code || '').toLowerCase().includes(term))
+    ? stock.filter((p) => {
+        const name = (p.product_name || '').toLowerCase();
+        const code = (p.product_code || '').toLowerCase();
+        return name.includes(term) || code.includes(term);
+      })
     : stock;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h2 className="text-2xl font-bold text-gray-800">Reports</h2>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={lowStockOnly}
-            onChange={handleLowStockToggle}
-            className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
-          />
-          <span className="text-sm font-medium text-gray-700">Low stock only (&lt; 50)</span>
-        </label>
+        <h2 className="text-2xl font-bold text-gray-800">Product Report</h2>
       </div>
-
-      {/* Bar Chart */}
-      {!loading && stock.length > 0 && (
-        <div className="bg-white rounded shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Stock Levels by Product</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={stock} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="product_code" tick={{ fontSize: 12 }} />
-              <YAxis />
-              <Tooltip
-                formatter={(value) => [value, 'Stock']}
-                labelFormatter={(label) => {
-                  const p = stock.find((s) => s.product_code === label);
-                  return p ? p.product_name : label;
-                }}
-              />
-              <Bar dataKey="total_stock" radius={[4, 4, 0, 0]}>
-                {stock.map((entry, index) => (
-                  <Cell key={index} fill={barColor(entry.total_stock)} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
 
       {/* Search */}
       <div className="flex flex-wrap gap-3 items-end">
@@ -106,7 +50,6 @@ export default function StockReport() {
         </div>
       </div>
 
-      {/* Stock Table */}
       {loading ? (
         <p className="text-gray-500">Loading...</p>
       ) : filtered.length === 0 ? (
@@ -146,7 +89,7 @@ export default function StockReport() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Stock</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Current Stock</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"></th>
                 </tr>
               </thead>
