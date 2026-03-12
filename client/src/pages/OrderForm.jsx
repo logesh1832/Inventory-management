@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
+import DateInput from '../components/DateInput';
+import { fmtDate } from '../utils/date';
 
 const emptyAllocation = () => ({
   id: Date.now() + Math.random(),
@@ -477,9 +479,8 @@ export default function OrderForm() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Order Date <span className="text-red-500">*</span>
               </label>
-              <input
+              <DateInput
                 ref={dateRef}
-                type="date"
                 value={orderDate}
                 onChange={(e) => { setOrderDate(e.target.value); setErrors((p) => ({ ...p, date: undefined })); }}
                 onKeyDown={handleDateKeyDown}
@@ -611,8 +612,8 @@ export default function OrderForm() {
                                     value: b.id,
                                     label: `${b.batch_number} — Available: ${b.adjusted_remaining}`,
                                     sublabel: [
-                                      b.manufacture_date ? `Mfg: ${new Date(b.manufacture_date).toLocaleDateString()}` : '',
-                                      b.expiry_date ? `Exp: ${new Date(b.expiry_date).toLocaleDateString()}` : '',
+                                      b.manufacture_date ? `Mfg: ${fmtDate(b.manufacture_date)}` : '',
+                                      b.expiry_date ? `Exp: ${fmtDate(b.expiry_date)}` : '',
                                     ].filter(Boolean).join(' | ') || undefined,
                                     disabled: b.adjusted_remaining <= 0,
                                   }))}

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../services/api';
+import { fmtDate } from '../utils/date';
+import DateInput from '../components/DateInput';
 
 const purposeLabel = {
   PITCHING: 'Pitching',
@@ -84,12 +86,12 @@ export default function MyVisits() {
       <div className="bg-white rounded-lg shadow px-4 py-3 flex flex-wrap items-center gap-4">
         <div>
           <label className="text-xs text-gray-500 block mb-1">From</label>
-          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}
+          <DateInput value={fromDate} onChange={(e) => setFromDate(e.target.value)}
             className="border border-gray-300 rounded px-3 py-1.5 text-sm" />
         </div>
         <div>
           <label className="text-xs text-gray-500 block mb-1">To</label>
-          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)}
+          <DateInput value={toDate} onChange={(e) => setToDate(e.target.value)}
             className="border border-gray-300 rounded px-3 py-1.5 text-sm" />
         </div>
         <div>
@@ -125,7 +127,7 @@ export default function MyVisits() {
               {visits.map((v) => (
                 <tr key={v.id} className={`hover:bg-gray-50 ${!v.location_verified ? 'bg-yellow-50' : ''}`}>
                   <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
-                    {new Date(v.check_in_at).toLocaleDateString()}<br />
+                    {fmtDate(v.check_in_at)}<br />
                     <span className="text-xs text-gray-500">
                       {new Date(v.check_in_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       {v.check_out_at && ` — ${new Date(v.check_out_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}

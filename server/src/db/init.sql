@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     reference_id UUID,
     supplier_id UUID REFERENCES customers(id) ON DELETE SET NULL,
     received_date DATE,
+    voucher_number VARCHAR(100),
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -146,5 +147,9 @@ BEGIN
     -- customers: created_by
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'customers' AND column_name = 'created_by') THEN
         ALTER TABLE customers ADD COLUMN created_by UUID REFERENCES users(id) ON DELETE SET NULL;
+    END IF;
+    -- stock_movements: voucher_number
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'stock_movements' AND column_name = 'voucher_number') THEN
+        ALTER TABLE stock_movements ADD COLUMN voucher_number VARCHAR(100);
     END IF;
 END $$;

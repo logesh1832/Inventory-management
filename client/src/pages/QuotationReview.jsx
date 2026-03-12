@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import { fmtDate } from '../utils/date';
 
 const formatCurrency = (val) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(val || 0);
@@ -346,7 +347,7 @@ export default function QuotationReview() {
           <span className="text-red-600 text-sm">{q.rejection_reason}</span>
           {q.reviewed_by_name && (
             <span className="text-red-500 text-xs ml-2">
-              — {q.reviewed_by_name} on {new Date(q.reviewed_at).toLocaleDateString()}
+              — {q.reviewed_by_name} on {fmtDate(q.reviewed_at)}
             </span>
           )}
         </div>
@@ -357,7 +358,7 @@ export default function QuotationReview() {
         <div className="flex justify-between items-start border-b pb-4">
           <div>
             <h3 className="text-xl font-bold text-gray-800">{q.quotation_number}</h3>
-            <p className="text-sm text-gray-500 mt-1">Date: {new Date(q.quotation_date).toLocaleDateString()}</p>
+            <p className="text-sm text-gray-500 mt-1">Date: {fmtDate(q.quotation_date)}</p>
           </div>
           <span className={`px-3 py-1 rounded-full text-sm font-semibold ${statusBadge(q.status)}`}>
             {statusLabel(q.status)}

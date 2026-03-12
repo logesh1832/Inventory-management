@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
+import { fmtDate } from '../utils/date';
 
 const formatCurrency = (val) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(val || 0);
@@ -97,7 +98,7 @@ export default function PendingQuotations() {
                   <td className="px-6 py-4 text-sm text-gray-600">{q.salesperson_name}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">{q.customer_name}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">
-                    {new Date(q.quotation_date).toLocaleDateString()}
+                    {fmtDate(q.quotation_date)}
                   </td>
                   <td className="px-6 py-4 text-sm text-right text-gray-500">{q.item_count}</td>
                   <td className="px-6 py-4 text-sm text-right font-medium">{formatCurrency(q.total_amount)}</td>

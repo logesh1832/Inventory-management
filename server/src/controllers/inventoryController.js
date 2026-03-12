@@ -244,7 +244,8 @@ const getMovementsBySupplier = async (req, res, next) => {
         TO_CHAR(sm.received_date, 'YYYY-MM-DD') AS received_date,
         c.customer_name AS supplier_name,
         COUNT(*) AS item_count,
-        SUM(sm.quantity) AS total_quantity
+        SUM(sm.quantity) AS total_quantity,
+        (array_agg(sm.voucher_number ORDER BY sm.created_at ASC))[1] AS voucher_number
       ${baseFrom}${whereClause}
       GROUP BY sm.supplier_id, sm.received_date, c.customer_name
       ORDER BY sm.received_date DESC

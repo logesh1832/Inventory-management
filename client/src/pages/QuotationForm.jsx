@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import DateInput from '../components/DateInput';
 
 const formatCurrency = (val) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(val || 0);
@@ -391,8 +392,7 @@ export default function QuotationForm() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Quotation Date *</label>
-            <input
-              type="date"
+            <DateInput
               value={quotationDate}
               onChange={(e) => {
                 setQuotationDate(e.target.value);

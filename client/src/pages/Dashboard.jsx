@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import { fmtDate } from '../utils/date';
 
 const stockBadge = (qty) => {
   if (qty < 50) return 'bg-red-100 text-red-700';
@@ -90,7 +91,7 @@ export default function Dashboard() {
                 >
                   <div>
                     <p className="text-sm font-medium text-gray-800">{o.invoice_number}</p>
-                    <p className="text-xs text-gray-500">{o.customer_name} &middot; {new Date(o.order_date).toLocaleDateString()}</p>
+                    <p className="text-xs text-gray-500">{o.customer_name} &middot; {fmtDate(o.order_date)}</p>
                   </div>
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusBadge(o.status)}`}>
                     {o.status}
@@ -115,7 +116,7 @@ export default function Dashboard() {
                 <div key={m.id} className="px-5 py-3 flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-800">{m.product_name}</p>
-                    <p className="text-xs text-gray-500">{m.batch_number || '-'} &middot; {new Date(m.created_at).toLocaleDateString()}</p>
+                    <p className="text-xs text-gray-500">{m.batch_number || '-'} &middot; {fmtDate(m.created_at)}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold">{m.quantity}</span>

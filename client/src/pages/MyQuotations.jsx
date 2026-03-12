@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { fmtDate } from '../utils/date';
+import DateInput from '../components/DateInput';
 
 const formatCurrency = (val) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(val || 0);
@@ -137,8 +139,7 @@ export default function MyQuotations() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">From Date</label>
-            <input
-              type="date"
+            <DateInput
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
               className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
@@ -146,8 +147,7 @@ export default function MyQuotations() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">To Date</label>
-            <input
-              type="date"
+            <DateInput
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
               className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
@@ -206,7 +206,7 @@ export default function MyQuotations() {
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                     {q.quotation_date
-                      ? new Date(q.quotation_date).toLocaleDateString()
+                      ? fmtDate(q.quotation_date)
                       : '-'}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-500">

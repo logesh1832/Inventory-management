@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
+import DateInput from '../components/DateInput';
 
 const emptyRow = () => ({
   id: Date.now() + Math.random(),
@@ -322,9 +323,8 @@ export default function BatchForm() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Received Date <span className="text-red-500">*</span>
               </label>
-              <input
+              <DateInput
                 ref={dateRef}
-                type="date"
                 value={receivedDate}
                 onChange={(e) => { setReceivedDate(e.target.value); setErrors((p) => ({ ...p, date: undefined })); }}
                 onKeyDown={handleDateKeyDown}
@@ -467,9 +467,8 @@ export default function BatchForm() {
                   <div className="grid grid-cols-2 gap-3 p-3 bg-blue-50 rounded border border-blue-100">
                     <div>
                       <label className="block text-xs font-medium text-blue-700 mb-1">Manufacture Date</label>
-                      <input
+                      <DateInput
                         data-mfd={row.id}
-                        type="date"
                         value={row.manufacture_date}
                         onChange={(e) => updateRow(row.id, 'manufacture_date', e.target.value)}
                         onKeyDown={(e) => handleMfdKeyDown(e, row)}
@@ -478,9 +477,8 @@ export default function BatchForm() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-blue-700 mb-1">Expiry Date</label>
-                      <input
+                      <DateInput
                         data-expiry={row.id}
-                        type="date"
                         value={row.expiry_date}
                         onChange={(e) => updateRow(row.id, 'expiry_date', e.target.value)}
                         onKeyDown={(e) => handleExpiryKeyDown(e, row)}

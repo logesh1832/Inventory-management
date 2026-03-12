@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Circle, Marker, Popup, useMapEvents, useMap } 
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import api from '../services/api';
+import { fmtDate } from '../utils/date';
 
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
@@ -557,7 +558,7 @@ export default function AreaManagement() {
                     <td className="px-4 py-3 font-medium text-gray-800">{a.area_name}</td>
                     <td className="px-4 py-3 text-gray-600">{a.salesperson_name}</td>
                     <td className="px-4 py-3 text-gray-500 text-sm">{a.salesperson_phone || '-'}</td>
-                    <td className="px-4 py-3 text-gray-500 text-sm">{new Date(a.assigned_at).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-gray-500 text-sm">{fmtDate(a.assigned_at)}</td>
                     <td className="px-4 py-3 text-right">
                       <button onClick={() => handleRemoveAssignment(a.id)} className="text-red-600 hover:text-red-800 text-sm">Remove</button>
                     </td>

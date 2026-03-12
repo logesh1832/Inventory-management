@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
 import Pagination from '../components/Pagination';
+import { fmtDate } from '../utils/date';
+import DateInput from '../components/DateInput';
 
 const today = () => new Date().toISOString().split('T')[0];
 
@@ -118,8 +120,7 @@ export default function Orders() {
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
-          <input
-            type="date"
+          <DateInput
             name="from_date"
             value={filters.from_date}
             onChange={handleFilterChange}
@@ -128,8 +129,7 @@ export default function Orders() {
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
-          <input
-            type="date"
+          <DateInput
             name="to_date"
             value={filters.to_date}
             onChange={handleFilterChange}
@@ -169,7 +169,7 @@ export default function Orders() {
               </div>
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-500">
-                  <span className="text-gray-400">Date:</span> {new Date(o.order_date).toLocaleDateString()}
+                  <span className="text-gray-400">Date:</span> {fmtDate(o.order_date)}
                 </div>
                 <div className="flex gap-3">
                   <button
@@ -212,7 +212,7 @@ export default function Orders() {
                   <td className="px-6 py-4 whitespace-nowrap font-medium">{o.invoice_number}</td>
                   <td className="px-6 py-4 whitespace-nowrap">{o.customer_name}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {new Date(o.order_date).toLocaleDateString()}
+                    {fmtDate(o.order_date)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span

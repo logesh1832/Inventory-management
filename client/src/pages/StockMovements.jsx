@@ -3,17 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
 import Pagination from '../components/Pagination';
+import { fmtDate } from '../utils/date';
+import DateInput from '../components/DateInput';
 
 const today = () => new Date().toISOString().split('T')[0];
 const toDateStr = (d) => d ? new Date(d).toISOString().split('T')[0] : '';
 
 export default function StockMovements() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState('in'); // 'in' | 'out' | 'all'
+  const [tab, setTab] = useState('in'); // 'in' | 'out'
 
   // Shared
   const [customers, setCustomers] = useState([]);
-  const [products, setProducts] = useState([]);
   const [fromDate, setFromDate] = useState(today());
   const [toDate, setToDate] = useState(today());
   const [page, setPage] = useState(1);
@@ -30,13 +31,6 @@ export default function StockMovements() {
   const [outTotal, setOutTotal] = useState(0);
   const [filterCustomerId, setFilterCustomerId] = useState('');
 
-  // All Movements
-  const [movements, setMovements] = useState([]);
-  const [movementsTotal, setMovementsTotal] = useState(0);
-  const [filterProductId, setFilterProductId] = useState('');
-  const [filterType, setFilterType] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
@@ -44,7 +38,6 @@ export default function StockMovements() {
 
   useEffect(() => {
     api.get('/customers').then((res) => setCustomers(res.data)).catch(() => {});
-    api.get('/products').then((res) => setProducts(res.data)).catch(() => {});
   }, []);
 
   const fetchInData = async (supplierId, fd, td, pg) => {
@@ -81,55 +74,23 @@ export default function StockMovements() {
     }
   };
 
-  const fetchAllMovements = async (productId, movementType, fd, td, pg, search) => {
-    try {
-      setLoading(true);
-      const params = { page: pg, limit: 20 };
-      if (productId) params.product_id = productId;
-      if (movementType) params.movement_type = movementType;
-      if (fd) params.from_date = fd;
-      if (td) params.to_date = td;
-      if (search && search.trim()) params.search = search.trim();
-      const res = await api.get('/inventory', { params });
-      setMovements(res.data.data);
-      setMovementsTotal(res.data.total);
-    } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to load stock movements', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchCurrentTab = (currentTab, pg, search) => {
+  const fetchCurrentTab = (currentTab, pg) => {
     if (currentTab === 'in') {
       fetchInData(filterSupplierId, fromDate, toDate, pg);
-    } else if (currentTab === 'out') {
-      fetchOutData(filterCustomerId, fromDate, toDate, pg);
     } else {
-      fetchAllMovements(filterProductId, filterType, fromDate, toDate, pg, search);
+      fetchOutData(filterCustomerId, fromDate, toDate, pg);
     }
   };
 
   useEffect(() => {
     setPage(1);
-    fetchCurrentTab(tab, 1, searchTerm);
+    fetchCurrentTab(tab, 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, fromDate, toDate, filterSupplierId, filterCustomerId, filterProductId, filterType]);
-
-  // Debounced server-side search for All Movements tab
-  useEffect(() => {
-    if (tab !== 'all') return;
-    const timer = setTimeout(() => {
-      setPage(1);
-      fetchAllMovements(filterProductId, filterType, fromDate, toDate, 1, searchTerm);
-    }, 300);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm]);
+  }, [tab, fromDate, toDate, filterSupplierId, filterCustomerId]);
 
   const handlePageChange = (pg) => {
     setPage(pg);
-    fetchCurrentTab(tab, pg, searchTerm);
+    fetchCurrentTab(tab, pg);
   };
 
   return (
@@ -164,14 +125,6 @@ export default function StockMovements() {
         >
           Material Out
         </button>
-        <button
-          onClick={() => setTab('all')}
-          className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
-            tab === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          All Movements
-        </button>
       </div>
 
       {/* Filters */}
@@ -198,35 +151,9 @@ export default function StockMovements() {
             />
           </div>
         )}
-        {tab === 'all' && (
-          <>
-            <div className="w-full sm:w-56">
-              <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
-              <SearchableSelect
-                options={products.map((p) => ({ value: p.id, label: p.product_name, sublabel: p.product_code }))}
-                value={filterProductId}
-                onChange={setFilterProductId}
-                placeholder="All Products"
-              />
-            </div>
-            <div className="w-full sm:w-auto">
-              <label className="block text-xs font-medium text-gray-500 mb-1">Movement Type</label>
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="border border-gray-300 rounded px-3 py-2 w-full sm:w-40"
-              >
-                <option value="">All</option>
-                <option value="IN">IN</option>
-                <option value="OUT">OUT</option>
-              </select>
-            </div>
-          </>
-        )}
         <div className="w-full sm:w-auto">
           <label className="block text-xs font-medium text-gray-500 mb-1">From Date</label>
-          <input
-            type="date"
+          <DateInput
             value={fromDate}
             onChange={(e) => setFromDate(e.target.value)}
             className="border border-gray-300 rounded px-3 py-2 w-full sm:w-40 text-sm"
@@ -234,25 +161,12 @@ export default function StockMovements() {
         </div>
         <div className="w-full sm:w-auto">
           <label className="block text-xs font-medium text-gray-500 mb-1">To Date</label>
-          <input
-            type="date"
+          <DateInput
             value={toDate}
             onChange={(e) => setToDate(e.target.value)}
             className="border border-gray-300 rounded px-3 py-2 w-full sm:w-40 text-sm"
           />
         </div>
-        {tab === 'all' && (
-          <div className="w-full sm:w-64 sm:ml-auto">
-            <label className="block text-xs font-medium text-gray-500 mb-1">Search</label>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by product, batch, invoice..."
-              className="border border-gray-300 rounded px-3 py-2 w-full text-sm"
-            />
-          </div>
-        )}
       </div>
 
       {loading ? (
@@ -277,9 +191,15 @@ export default function StockMovements() {
                       +{g.total_quantity}
                     </span>
                   </div>
+                  {g.voucher_number && (
+                    <div className="text-sm text-gray-500">
+                      <span className="text-gray-400">Voucher:</span>{' '}
+                      <span className="font-medium text-gray-700">{g.voucher_number}</span>
+                    </div>
+                  )}
                   <div className="text-sm text-gray-500">
                     <span className="text-gray-400">Date:</span>{' '}
-                    {new Date(g.received_date).toLocaleDateString()}
+                    {fmtDate(g.received_date)}
                   </div>
                   <div className="text-sm text-gray-500">
                     <span className="text-gray-400">Items:</span> {g.item_count} products
@@ -293,6 +213,7 @@ export default function StockMovements() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Voucher #</th>
                     <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                     <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
                     <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items</th>
@@ -306,8 +227,11 @@ export default function StockMovements() {
                       className="hover:bg-gray-50 cursor-pointer"
                       onClick={() => navigate(`/batches/view?supplier=${g.supplier_id}&date=${toDateStr(g.received_date)}`)}
                     >
+                      <td className="px-5 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">
+                        {g.voucher_number || '\u2014'}
+                      </td>
                       <td className="px-5 py-3 text-sm text-gray-700 whitespace-nowrap">
-                        {new Date(g.received_date).toLocaleDateString()}
+                        {fmtDate(g.received_date)}
                       </td>
                       <td className="px-5 py-3 text-sm font-medium text-gray-800">{g.supplier_name}</td>
                       <td className="px-5 py-3 text-sm">
@@ -329,7 +253,7 @@ export default function StockMovements() {
             <Pagination page={page} total={inTotal} limit={20} onPageChange={handlePageChange} />
           </>
         )
-      ) : tab === 'out' ? (
+      ) : (
         /* Material Out Tab */
         outData.length === 0 ? (
           <p className="text-gray-500">No material out movements found.</p>
@@ -351,7 +275,7 @@ export default function StockMovements() {
                   </div>
                   <div className="text-sm text-gray-500">
                     <span className="text-gray-400">Date:</span>{' '}
-                    {new Date(g.order_date).toLocaleDateString()}
+                    {fmtDate(g.order_date)}
                   </div>
                   <div className="text-sm text-gray-500">
                     <span className="text-gray-400">Invoice:</span> {g.invoice_number || '\u2014'}
@@ -383,7 +307,7 @@ export default function StockMovements() {
                       onClick={() => navigate(`/orders/${g.order_id}`)}
                     >
                       <td className="px-5 py-3 text-sm text-gray-700 whitespace-nowrap">
-                        {new Date(g.order_date).toLocaleDateString()}
+                        {fmtDate(g.order_date)}
                       </td>
                       <td className="px-5 py-3 text-sm font-medium text-gray-800">{g.customer_name}</td>
                       <td className="px-5 py-3 text-sm text-gray-700">{g.invoice_number || '\u2014'}</td>
@@ -405,108 +329,6 @@ export default function StockMovements() {
 
             <Pagination page={page} total={outTotal} limit={20} onPageChange={handlePageChange} />
           </>
-        )
-      ) : (
-        /* All Movements Tab */
-        movements.length === 0 ? (
-          <p className="text-gray-500">No stock movements found.</p>
-        ) : (
-            <>
-              {/* Mobile cards */}
-              <div className="md:hidden space-y-3">
-                {movements.map((m) => (
-                  <div key={m.id} className="bg-white rounded-lg shadow p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-900">{m.product_name}</span>
-                      <span
-                        className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
-                          m.movement_type === 'IN'
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-red-100 text-red-700'
-                        }`}
-                      >
-                        {m.movement_type}
-                      </span>
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      <span className="text-gray-400">Date:</span> {new Date(m.created_at).toLocaleDateString()}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      <span className="text-gray-400">Batch:</span> {m.batch_number || '\u2014'}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      <span className="text-gray-400">Quantity:</span> {m.quantity}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      <span className="text-gray-400">Reference:</span>{' '}
-                      {m.reference_type === 'ORDER' && m.reference_id ? (
-                        <button
-                          onClick={() => navigate(`/orders/${m.reference_id}`)}
-                          className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
-                        >
-                          {m.invoice_number || `Order #${m.reference_id}`}
-                        </button>
-                      ) : (
-                        <span>{m.reference_type || '\u2014'}</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Desktop table */}
-              <div className="hidden md:block overflow-x-auto bg-white rounded shadow">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch #</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invoice / Reference</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {movements.map((m) => (
-                      <tr key={m.id}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {new Date(m.created_at).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">{m.product_name}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">{m.batch_number || '\u2014'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">{m.quantity}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span
-                            className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
-                              m.movement_type === 'IN'
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-red-100 text-red-700'
-                            }`}
-                          >
-                            {m.movement_type}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {m.reference_type === 'ORDER' && m.reference_id ? (
-                            <button
-                              onClick={() => navigate(`/orders/${m.reference_id}`)}
-                              className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
-                            >
-                              {m.invoice_number || `Order #${m.reference_id}`}
-                            </button>
-                          ) : (
-                            <span>{m.reference_type || '\u2014'}</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <Pagination page={page} total={movementsTotal} limit={20} onPageChange={handlePageChange} />
-            </>
         )
       )}
     </div>

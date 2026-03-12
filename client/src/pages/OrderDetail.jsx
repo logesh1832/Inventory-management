@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../services/api';
+import { fmtDate } from '../utils/date';
 
 export default function OrderDetail() {
   const { id } = useParams();
@@ -87,7 +88,7 @@ export default function OrderDetail() {
           <div>
             <h3 className="text-xl font-bold text-gray-800">{order.invoice_number}</h3>
             <p className="text-sm text-gray-500 mt-1">
-              Date: {new Date(order.order_date).toLocaleDateString()}
+              Date: {fmtDate(order.order_date)}
             </p>
           </div>
           <span

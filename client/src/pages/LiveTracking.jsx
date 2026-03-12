@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { fmtDate } from '../utils/date';
+import DateInput from '../components/DateInput';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
@@ -250,8 +252,7 @@ export default function LiveTracking() {
           <div className="bg-white rounded-lg shadow px-4 py-3 flex flex-wrap items-center gap-4">
             <div>
               <label className="text-xs text-gray-500 block mb-1">Date</label>
-              <input
-                type="date"
+              <DateInput
                 value={historyDate}
                 onChange={(e) => setHistoryDate(e.target.value)}
                 className="border border-gray-300 rounded px-3 py-1.5 text-sm"
@@ -275,7 +276,7 @@ export default function LiveTracking() {
           {/* Daily Summary */}
           <div className="bg-white rounded-lg shadow">
             <div className="px-4 py-3 border-b border-gray-200">
-              <h3 className="font-semibold text-gray-800">Daily Summary — {new Date(historyDate + 'T00:00').toLocaleDateString()}</h3>
+              <h3 className="font-semibold text-gray-800">Daily Summary — {fmtDate(historyDate + 'T00:00')}</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -360,7 +361,7 @@ export default function LiveTracking() {
           <div className="bg-white rounded-lg shadow px-4 py-3 flex flex-wrap items-center gap-4">
             <div>
               <label className="text-xs text-gray-500 block mb-1">Date</label>
-              <input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)}
+              <DateInput value={visitDate} onChange={(e) => setVisitDate(e.target.value)}
                 className="border border-gray-300 rounded px-3 py-1.5 text-sm" />
             </div>
             <div>

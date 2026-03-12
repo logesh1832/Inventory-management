@@ -1,5 +1,18 @@
 const pool = require('../config/db');
 
+// Generate next voucher number: VCH-0001, VCH-0002, ...
+const generateVoucherNumber = async (client) => {
+  const last = await client.query(
+    "SELECT voucher_number FROM stock_movements WHERE voucher_number IS NOT NULL ORDER BY created_at DESC LIMIT 1"
+  );
+  let nextNumber = 1;
+  if (last.rows.length > 0) {
+    const lastNum = parseInt(last.rows[0].voucher_number.replace('VCH-', ''), 10);
+    if (!isNaN(lastNum)) nextNumber = lastNum + 1;
+  }
+  return `VCH-${String(nextNumber).padStart(4, '0')}`;
+};
+
 // POST /api/batches — single batch create (kept for compatibility)
 const createBatch = async (req, res, next) => {
   try {
@@ -22,6 +35,8 @@ const createBatch = async (req, res, next) => {
     try {
       await client.query('BEGIN');
 
+      const voucherNumber = await generateVoucherNumber(client);
+
       const safeBatchNumber = batch_number ? batch_number.trim() : null;
       const batchResult = await client.query(
         `INSERT INTO inventory_batches (product_id, batch_number, quantity_received, quantity_remaining, received_date)
@@ -32,9 +47,9 @@ const createBatch = async (req, res, next) => {
       const batch = batchResult.rows[0];
 
       await client.query(
-        `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date)
-         VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5)`,
-        [product_id, batch.id, quantity_received, supplier_id || null, received_date]
+        `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date, voucher_number)
+         VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5, $6)`,
+        [product_id, batch.id, quantity_received, supplier_id || null, received_date, voucherNumber]
       );
 
       await client.query('COMMIT');
@@ -84,6 +99,9 @@ const createBulkBatches = async (req, res, next) => {
     try {
       await client.query('BEGIN');
 
+      // Generate one voucher number for the entire group
+      const voucherNumber = await generateVoucherNumber(client);
+
       for (const item of items) {
         const qty = Number(item.quantity);
 
@@ -106,9 +124,9 @@ const createBulkBatches = async (req, res, next) => {
 
           // Each stock entry records the supplier separately
           await client.query(
-            `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date)
-             VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5)`,
-            [batch.product_id, batch.id, qty, supplier_id, received_date]
+            `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date, voucher_number)
+             VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5, $6)`,
+            [batch.product_id, batch.id, qty, supplier_id, received_date, voucherNumber]
           );
 
           results.push({ action: 'updated', batch });
@@ -126,9 +144,9 @@ const createBulkBatches = async (req, res, next) => {
           const batch = batchResult.rows[0];
 
           await client.query(
-            `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date)
-             VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5)`,
-            [item.product_id, batch.id, qty, supplier_id, received_date]
+            `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date, voucher_number)
+             VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5, $6)`,
+            [item.product_id, batch.id, qty, supplier_id, received_date, voucherNumber]
           );
 
           results.push({ action: 'created', batch });
@@ -136,7 +154,7 @@ const createBulkBatches = async (req, res, next) => {
       }
 
       await client.query('COMMIT');
-      res.status(201).json({ message: `${results.length} batch(es) processed`, results });
+      res.status(201).json({ message: `${results.length} batch(es) processed`, voucherNumber, results });
     } catch (txErr) {
       await client.query('ROLLBACK');
       if (txErr.code === '23505') {
@@ -447,7 +465,7 @@ const getStockEntrySiblings = async (req, res, next) => {
 
     // Fetch all siblings
     const result = await pool.query(
-      `SELECT sm.id, sm.quantity, sm.supplier_id,
+      `SELECT sm.id, sm.quantity, sm.supplier_id, sm.voucher_number,
               COALESCE(sm.received_date, sm.created_at::date)::date AS received_date,
               sm.product_id, sm.batch_id,
               p.product_name, p.product_code, p.batch_tracking,
@@ -516,7 +534,8 @@ const getStockEntryGroups = async (req, res, next) => {
              TO_CHAR(COALESCE(sm.received_date, sm.created_at::date)::date, 'YYYY-MM-DD') AS received_date,
              COUNT(*) AS item_count,
              SUM(sm.quantity) AS total_quantity,
-             (array_agg(sm.id ORDER BY sm.created_at ASC))[1] AS first_entry_id
+             (array_agg(sm.id ORDER BY sm.created_at ASC))[1] AS first_entry_id,
+             (array_agg(sm.voucher_number ORDER BY sm.created_at ASC))[1] AS voucher_number
       ${baseFrom}${whereClause}
       ${groupBy}
       ORDER BY COALESCE(sm.received_date, sm.created_at::date)::date DESC, c.customer_name ASC
@@ -539,7 +558,7 @@ const getStockEntriesByGroup = async (req, res, next) => {
     }
 
     const result = await pool.query(
-      `SELECT sm.id, sm.quantity, sm.supplier_id,
+      `SELECT sm.id, sm.quantity, sm.supplier_id, sm.voucher_number,
               COALESCE(sm.received_date, sm.created_at::date)::date AS received_date,
               sm.product_id, sm.batch_id,
               p.product_name, p.product_code, p.batch_tracking, p.unit, p.qty_per_box,

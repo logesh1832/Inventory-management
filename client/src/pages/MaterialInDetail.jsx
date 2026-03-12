@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
+import { fmtDate } from '../utils/date';
 
 export default function MaterialInDetail() {
   const [searchParams] = useSearchParams();
@@ -44,6 +45,7 @@ export default function MaterialInDetail() {
   };
 
   const supplierName = entries.length > 0 ? entries[0].supplier_name : '';
+  const voucherNumber = entries.length > 0 ? entries[0].voucher_number : '';
   const totalQty = entries.reduce((sum, e) => sum + e.quantity, 0);
   const firstEntryId = entries.length > 0 ? entries[0].id : null;
 
@@ -88,9 +90,11 @@ export default function MaterialInDetail() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6 pb-6 border-b border-gray-200">
           <div>
-            <h3 className="text-lg font-bold text-gray-800">Material In Receipt</h3>
+            <h3 className="text-lg font-bold text-gray-800">
+              {voucherNumber || 'Material In Receipt'}
+            </h3>
             <p className="text-sm text-gray-500 mt-1">
-              Date: <span className="font-medium text-gray-700">{new Date(date).toLocaleDateString()}</span>
+              Date: <span className="font-medium text-gray-700">{fmtDate(date)}</span>
             </p>
           </div>
           <div className="text-left sm:text-right">
@@ -146,12 +150,12 @@ export default function MaterialInDetail() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-                    {e.manufacture_date ? new Date(e.manufacture_date).toLocaleDateString() : '-'}
+                    {e.manufacture_date ? fmtDate(e.manufacture_date) : '-'}
                   </td>
                   <td className="px-4 py-3 text-sm whitespace-nowrap">
                     {e.expiry_date ? (
                       <span className={new Date(e.expiry_date) < new Date() ? 'text-red-600 font-medium' : 'text-gray-500'}>
-                        {new Date(e.expiry_date).toLocaleDateString()}
+                        {fmtDate(e.expiry_date)}
                       </span>
                     ) : '-'}
                   </td>

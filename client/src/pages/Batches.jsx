@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
 import Pagination from '../components/Pagination';
+import { fmtDate } from '../utils/date';
+import DateInput from '../components/DateInput';
 
 const today = () => new Date().toISOString().split('T')[0];
 const toDateStr = (d) => d ? new Date(d).toISOString().split('T')[0] : '';
@@ -69,7 +71,7 @@ export default function Batches() {
   };
 
   const handleDeleteGroup = async (supplierId, receivedDate, supplierName) => {
-    if (!window.confirm(`Are you sure you want to delete ALL stock entries from ${supplierName} on ${new Date(receivedDate).toLocaleDateString()}? This will reverse batch quantities.`)) return;
+    if (!window.confirm(`Are you sure you want to delete ALL stock entries from ${supplierName} on ${fmtDate(receivedDate)}? This will reverse batch quantities.`)) return;
     try {
       await api.delete('/batches/stock-entry-group', { params: { supplier_id: supplierId, date: receivedDate } });
       showToast('Stock entries deleted successfully');
@@ -147,8 +149,7 @@ export default function Batches() {
         )}
         <div className="w-full sm:w-auto">
           <label className="block text-xs font-medium text-gray-500 mb-1">From Date</label>
-          <input
-            type="date"
+          <DateInput
             value={fromDate}
             onChange={(e) => setFromDate(e.target.value)}
             className="border border-gray-300 rounded px-3 py-2 w-full sm:w-40 text-sm"
@@ -156,8 +157,7 @@ export default function Batches() {
         </div>
         <div className="w-full sm:w-auto">
           <label className="block text-xs font-medium text-gray-500 mb-1">To Date</label>
-          <input
-            type="date"
+          <DateInput
             value={toDate}
             onChange={(e) => setToDate(e.target.value)}
             className="border border-gray-300 rounded px-3 py-2 w-full sm:w-40 text-sm"
@@ -187,9 +187,15 @@ export default function Batches() {
                     +{g.total_quantity}
                   </span>
                 </div>
+                {g.voucher_number && (
+                  <div className="text-sm text-gray-500">
+                    <span className="text-gray-400">Voucher:</span>{' '}
+                    <span className="font-medium text-gray-700">{g.voucher_number}</span>
+                  </div>
+                )}
                 <div className="text-sm text-gray-500">
                   <span className="text-gray-400">Date:</span>{' '}
-                  {new Date(g.received_date).toLocaleDateString()}
+                  {fmtDate(g.received_date)}
                 </div>
                 <div className="text-sm text-gray-500">
                   <span className="text-gray-400">Items:</span> {g.item_count} products
@@ -217,6 +223,7 @@ export default function Batches() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Voucher #</th>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items</th>
@@ -231,8 +238,11 @@ export default function Batches() {
                     className="hover:bg-gray-50 cursor-pointer"
                     onClick={() => navigate(`/batches/view?supplier=${g.supplier_id}&date=${toDateStr(g.received_date)}`)}
                   >
+                    <td className="px-5 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">
+                      {g.voucher_number || '\u2014'}
+                    </td>
                     <td className="px-5 py-3 text-sm text-gray-700 whitespace-nowrap">
-                      {new Date(g.received_date).toLocaleDateString()}
+                      {fmtDate(g.received_date)}
                     </td>
                     <td className="px-5 py-3 text-sm font-medium text-gray-800">{g.supplier_name}</td>
                     <td className="px-5 py-3 text-sm">
@@ -299,7 +309,7 @@ export default function Batches() {
                   <span className="text-gray-400">Received:</span> {b.quantity_received}
                 </div>
                 <div className="text-sm text-gray-500">
-                  <span className="text-gray-400">First Received:</span> {new Date(b.received_date).toLocaleDateString()}
+                  <span className="text-gray-400">First Received:</span> {fmtDate(b.received_date)}
                 </div>
               </div>
             ))}
@@ -333,7 +343,7 @@ export default function Batches() {
                       </span>
                     </td>
                     <td className="px-5 py-3 text-sm">
-                      {new Date(b.received_date).toLocaleDateString()}
+                      {fmtDate(b.received_date)}
                     </td>
                   </tr>
                 ))}

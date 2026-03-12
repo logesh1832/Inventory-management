@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
 import Pagination from '../components/Pagination';
+import { fmtDate } from '../utils/date';
+import DateInput from '../components/DateInput';
 
 export default function ProductMovementDetail() {
   const { id: productId } = useParams();
@@ -114,8 +116,7 @@ export default function ProductMovementDetail() {
       <div className="flex flex-wrap gap-3 mb-4 items-end">
         <div className="w-full sm:w-auto">
           <label className="block text-xs font-medium text-gray-500 mb-1">From Date</label>
-          <input
-            type="date"
+          <DateInput
             value={fromDate}
             onChange={(e) => { setFromDate(e.target.value); handleFilter(e.target.value, toDate, filterType); }}
             className="border border-gray-300 rounded px-3 py-2 w-full sm:w-40 text-sm"
@@ -123,8 +124,7 @@ export default function ProductMovementDetail() {
         </div>
         <div className="w-full sm:w-auto">
           <label className="block text-xs font-medium text-gray-500 mb-1">To Date</label>
-          <input
-            type="date"
+          <DateInput
             value={toDate}
             onChange={(e) => { setToDate(e.target.value); handleFilter(fromDate, e.target.value, filterType); }}
             className="border border-gray-300 rounded px-3 py-2 w-full sm:w-40 text-sm"
@@ -156,7 +156,7 @@ export default function ProductMovementDetail() {
             {movements.map((m) => (
               <div key={m.id} className="bg-white rounded-lg shadow p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-700">{new Date(m.created_at).toLocaleDateString()}</span>
+                  <span className="text-sm text-gray-700">{fmtDate(m.created_at)}</span>
                   <span
                     className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
                       m.movement_type === 'IN' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
@@ -205,7 +205,7 @@ export default function ProductMovementDetail() {
                 {movements.map((m) => (
                   <tr key={m.id} className="hover:bg-gray-50">
                     <td className="px-5 py-3 text-sm text-gray-700 whitespace-nowrap">
-                      {new Date(m.created_at).toLocaleDateString()}
+                      {fmtDate(m.created_at)}
                     </td>
                     <td className="px-5 py-3 text-sm">
                       <span

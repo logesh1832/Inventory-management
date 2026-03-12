@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../services/api';
+import { fmtDate } from '../utils/date';
 
 const formatINR = (amount) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
@@ -14,7 +15,7 @@ const PERIOD_LABELS = {
 function periodLabel(target) {
   const label = PERIOD_LABELS[target.period_type] || target.period_type;
   const start = new Date(target.period_start);
-  const monthYear = start.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  const monthYear = `${start.toLocaleString('en-GB', { month: 'long' })} ${start.getFullYear()}`;
   return `${label} \u2014 ${monthYear}`;
 }
 
@@ -104,7 +105,7 @@ function TargetCard({ target }) {
                       <td className="px-3 py-2 text-gray-700">{o.customer_name || '-'}</td>
                       <td className="px-3 py-2 text-gray-900 text-right">{formatINR(o.total_amount || o.amount || 0)}</td>
                       <td className="px-3 py-2 text-gray-700">
-                        {o.created_at ? new Date(o.created_at).toLocaleDateString('en-IN') : '-'}
+                        {o.created_at ? fmtDate(o.created_at) : '-'}
                       </td>
                     </tr>
                   ))}

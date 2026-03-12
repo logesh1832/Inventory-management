@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
+import DateInput from '../components/DateInput';
 
 const formatINR = (amount) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
@@ -30,7 +31,7 @@ function ProgressBar({ percentage }) {
 function formatPeriod(start, end) {
   const s = new Date(start);
   const e = new Date(end);
-  const fmt = (d) => d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric', day: 'numeric' });
+  const fmt = (d) => { const dd = String(d.getDate()).padStart(2, '0'); const mm = d.toLocaleString('en-GB', { month: 'short' }); return `${dd} ${mm} ${d.getFullYear()}`; };
   return `${fmt(s)} - ${fmt(e)}`;
 }
 
@@ -325,8 +326,7 @@ export default function TargetManagement() {
               {/* Period Start */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Period Start</label>
-                <input
-                  type="date"
+                <DateInput
                   value={form.period_start}
                   onChange={(e) => setForm({ ...form, period_start: e.target.value })}
                   disabled={!!editTarget}

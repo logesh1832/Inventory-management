@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
+import DateInput from '../components/DateInput';
 
 const toDateStr = (v) => {
   if (!v) return '';
@@ -47,6 +48,9 @@ const focusExpiry = (rowId) => {
   }, 50);
 };
 
+let tempIdCounter = 0;
+const makeTempId = () => `new-${Date.now()}-${++tempIdCounter}`;
+
 export default function StockEntryEdit() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -62,11 +66,15 @@ export default function StockEntryEdit() {
   const [supplierId, setSupplierId] = useState('');
   const [receivedDate, setReceivedDate] = useState('');
 
-  // Rows: each is an existing stock entry
+  // Rows: existing entries have a UUID id, new ones have "new-..." prefix
   const [rows, setRows] = useState([]);
+  // Track ids of rows that were deleted (existing only)
+  const [deletedIds, setDeletedIds] = useState([]);
 
   const formRef = useRef(null);
   const qtyRefs = useRef({});
+
+  const isNewRow = (row) => String(row.id).startsWith('new-');
 
   useEffect(() => {
     Promise.all([
@@ -89,11 +97,9 @@ export default function StockEntryEdit() {
         return;
       }
 
-      // Set header from first entry
       setSupplierId(entries[0].supplier_id || '');
       setReceivedDate(toDateStr(entries[0].received_date));
 
-      // Build rows — fetch batches for each entry
       const rowsData = [];
       for (const e of entries) {
         let productBatches = [];
@@ -105,14 +111,14 @@ export default function StockEntryEdit() {
         }
 
         rowsData.push({
-          id: e.id,                    // stock_movement id
+          id: e.id,
           product_id: e.product_id,
           product_name: e.product_name,
           product_code: e.product_code,
           batch_tracking: e.batch_tracking,
           batch_id: e.batch_id,
           quantity: String(e.quantity),
-          batchMode: 'current',        // 'current' | 'existing' | 'new'
+          batchMode: 'current',
           existing_batch_id: '',
           batch_number: e.batch_number || '',
           manufacture_date: toDateStr(e.manufacture_date),
@@ -132,6 +138,49 @@ export default function StockEntryEdit() {
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
+  };
+
+  const addRow = () => {
+    const newId = makeTempId();
+    setRows((prev) => [
+      ...prev,
+      {
+        id: newId,
+        product_id: '',
+        product_name: '',
+        product_code: '',
+        batch_tracking: false,
+        batch_id: null,
+        quantity: '',
+        batchMode: 'new',
+        existing_batch_id: '',
+        batch_number: '',
+        manufacture_date: '',
+        expiry_date: '',
+        productBatches: [],
+      },
+    ]);
+    // Focus the new row's product selector
+    setTimeout(() => focusProduct(newId), 100);
+  };
+
+  const removeRow = async (rowId) => {
+    if (isNewRow({ id: rowId })) {
+      // Just remove from state
+      setRows((prev) => prev.filter((r) => r.id !== rowId));
+      return;
+    }
+
+    // Existing row — confirm and delete via API
+    if (!window.confirm('Delete this stock entry? This will reverse the batch quantity.')) return;
+    try {
+      await api.delete(`/batches/stock-entries/${rowId}`);
+      setRows((prev) => prev.filter((r) => r.id !== rowId));
+      setDeletedIds((prev) => [...prev, rowId]);
+      showToast('Entry deleted');
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to delete entry', 'error');
+    }
   };
 
   const updateRow = (rowId, field, value) => {
@@ -161,7 +210,7 @@ export default function StockEntryEdit() {
           product_name: product?.product_name || '',
           product_code: product?.product_code || '',
           batch_tracking: product?.batch_tracking || false,
-          batchMode: 'current',
+          batchMode: isNewRow(r) ? 'new' : 'current',
           existing_batch_id: '',
           batch_number: '',
           manufacture_date: '',
@@ -191,11 +240,15 @@ export default function StockEntryEdit() {
     if (!supplierId) newErrors.supplier = 'Supplier is required';
     if (!receivedDate) newErrors.date = 'Date is required';
 
+    if (rows.length === 0) {
+      newErrors.general = 'At least one item is required';
+    }
+
     rows.forEach((row) => {
       const rowErrors = [];
       if (!row.product_id) rowErrors.push('Select a product');
       if (!row.quantity || Number(row.quantity) <= 0) rowErrors.push('Enter quantity');
-      if (row.batchMode === 'existing' && !row.existing_batch_id) rowErrors.push('Select a batch');
+      if (row.batch_tracking && row.batchMode === 'existing' && !row.existing_batch_id) rowErrors.push('Select a batch');
       if (rowErrors.length > 0) newErrors[row.id] = rowErrors.join(', ');
     });
 
@@ -209,8 +262,11 @@ export default function StockEntryEdit() {
 
     setSaving(true);
     try {
-      // Update each entry individually
-      for (const row of rows) {
+      const existingRows = rows.filter((r) => !isNewRow(r));
+      const newRows = rows.filter((r) => isNewRow(r));
+
+      // Update existing entries
+      for (const row of existingRows) {
         const payload = {
           product_id: row.product_id,
           quantity: Number(row.quantity),
@@ -229,10 +285,35 @@ export default function StockEntryEdit() {
         await api.put(`/batches/stock-entries/${row.id}`, payload);
       }
 
-      showToast(`${rows.length} entry(s) updated successfully`);
+      // Create new entries via bulk endpoint
+      if (newRows.length > 0) {
+        const items = newRows.map((row) => {
+          const item = {
+            product_id: row.product_id,
+            quantity: Number(row.quantity),
+          };
+          if (row.batch_tracking && row.batchMode === 'existing' && row.existing_batch_id) {
+            item.existing_batch_id = row.existing_batch_id;
+          } else {
+            if (row.batch_number) item.new_batch_number = row.batch_number;
+            if (row.manufacture_date) item.manufacture_date = row.manufacture_date;
+            if (row.expiry_date) item.expiry_date = row.expiry_date;
+          }
+          return item;
+        });
+
+        await api.post('/batches/bulk', {
+          supplier_id: supplierId,
+          received_date: receivedDate,
+          items,
+        });
+      }
+
+      const total = existingRows.length + newRows.length;
+      showToast(`${total} entry(s) saved successfully`);
       setTimeout(() => navigate('/batches'), 600);
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to update', 'error');
+      showToast(err.response?.data?.error || 'Failed to save', 'error');
     } finally {
       setSaving(false);
     }
@@ -250,7 +331,6 @@ export default function StockEntryEdit() {
     return () => window.removeEventListener('keydown', handleKey);
   }, []);
 
-  // Qty → Enter: if batch_tracking go to batch toggle, else next row's qty
   const handleQtyKeyDown = (e, row) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -274,7 +354,7 @@ export default function StockEntryEdit() {
   const handleBatchToggleKeyDown = (e, row) => {
     if (e.key === 'Tab') {
       e.preventDefault();
-      const modes = ['current'];
+      const modes = isNewRow(row) ? [] : ['current'];
       if (row.productBatches.length > 0) modes.push('existing');
       modes.push('new');
       const idx = modes.indexOf(row.batchMode);
@@ -326,7 +406,7 @@ export default function StockEntryEdit() {
   };
 
   if (loading) return <p className="text-gray-500">Loading...</p>;
-  if (rows.length === 0) return <p className="text-red-500">No stock entries found.</p>;
+  if (rows.length === 0 && deletedIds.length === 0) return <p className="text-red-500">No stock entries found.</p>;
 
   return (
     <div>
@@ -367,8 +447,7 @@ export default function StockEntryEdit() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Received Date</label>
-              <input
-                type="date"
+              <DateInput
                 value={receivedDate}
                 onChange={(e) => { setReceivedDate(e.target.value); setErrors((p) => ({ ...p, date: undefined })); }}
                 onKeyDown={handleDateKeyDown}
@@ -381,16 +460,43 @@ export default function StockEntryEdit() {
 
         {/* Items */}
         <div className="bg-white rounded-lg shadow overflow-hidden mb-4">
-          <div className="px-5 py-3 border-b border-gray-200">
+          <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-700">Items ({rows.length})</h3>
+            <button
+              type="button"
+              onClick={addRow}
+              className="text-sm font-medium text-yellow-700 bg-yellow-100 hover:bg-yellow-200 px-3 py-1 rounded transition-colors"
+            >
+              + Add Item
+            </button>
           </div>
+
+          {errors.general && (
+            <div className="px-5 py-2 bg-red-50 border-b border-red-200">
+              <p className="text-red-600 text-xs">{errors.general}</p>
+            </div>
+          )}
 
           <div className="divide-y divide-gray-100">
             {rows.map((row, idx) => (
               <div key={row.id} className={`px-5 py-4 ${errors[row.id] ? 'bg-red-50' : ''}`}>
                 {/* Row header */}
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-semibold text-gray-400">ITEM {idx + 1}</span>
+                  <span className="text-xs font-semibold text-gray-400">
+                    ITEM {idx + 1}
+                    {isNewRow(row) && (
+                      <span className="ml-2 text-green-600 bg-green-50 px-1.5 py-0.5 rounded">NEW</span>
+                    )}
+                  </span>
+                  {rows.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeRow(row.id)}
+                      className="text-red-500 hover:text-red-700 text-xs font-medium"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </div>
 
                 {/* Product + Quantity */}
@@ -414,7 +520,7 @@ export default function StockEntryEdit() {
                       value={row.quantity}
                       onChange={(e) => updateRow(row.id, 'quantity', e.target.value)}
                       onKeyDown={(e) => handleQtyKeyDown(e, row)}
-                      autoFocus={idx === 0}
+                      autoFocus={idx === 0 && !isNewRow(row)}
                       placeholder="0"
                       className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500"
                     />
@@ -445,15 +551,26 @@ export default function StockEntryEdit() {
                         onKeyDown={(e) => handleBatchToggleKeyDown(e, row)}
                         className="flex bg-gray-100 rounded text-xs overflow-hidden w-fit focus:outline-none focus:ring-2 focus:ring-yellow-500"
                       >
-                        <span className={`px-3 py-1.5 transition-colors cursor-default ${row.batchMode === 'current' ? 'bg-yellow-500 text-gray-900 font-semibold' : 'text-gray-500'}`}>
-                          Current Batch
-                        </span>
-                        {row.productBatches.length > 0 && (
-                          <span className={`px-3 py-1.5 transition-colors cursor-default ${row.batchMode === 'existing' ? 'bg-yellow-500 text-gray-900 font-semibold' : 'text-gray-500'}`}>
-                            Move to Existing
+                        {!isNewRow(row) && (
+                          <span
+                            onClick={() => updateRow(row.id, 'batchMode', 'current')}
+                            className={`px-3 py-1.5 transition-colors cursor-pointer ${row.batchMode === 'current' ? 'bg-yellow-500 text-gray-900 font-semibold' : 'text-gray-500'}`}
+                          >
+                            Current Batch
                           </span>
                         )}
-                        <span className={`px-3 py-1.5 transition-colors cursor-default ${row.batchMode === 'new' ? 'bg-yellow-500 text-gray-900 font-semibold' : 'text-gray-500'}`}>
+                        {row.productBatches.length > 0 && (
+                          <span
+                            onClick={() => updateRow(row.id, 'batchMode', 'existing')}
+                            className={`px-3 py-1.5 transition-colors cursor-pointer ${row.batchMode === 'existing' ? 'bg-yellow-500 text-gray-900 font-semibold' : 'text-gray-500'}`}
+                          >
+                            {isNewRow(row) ? 'Existing Batch' : 'Move to Existing'}
+                          </span>
+                        )}
+                        <span
+                          onClick={() => updateRow(row.id, 'batchMode', 'new')}
+                          className={`px-3 py-1.5 transition-colors cursor-pointer ${row.batchMode === 'new' ? 'bg-yellow-500 text-gray-900 font-semibold' : 'text-gray-500'}`}
+                        >
                           New Batch
                         </span>
                       </div>
@@ -472,7 +589,7 @@ export default function StockEntryEdit() {
                             onEnterAfterSelect={() => focusNextRowQty(row.id)}
                           />
                         </div>
-                      ) : (
+                      ) : row.batchMode === 'current' && !isNewRow(row) ? (
                         <>
                           <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1">Batch Number</label>
@@ -488,9 +605,8 @@ export default function StockEntryEdit() {
                           <div className="grid grid-cols-2 gap-3 p-3 bg-blue-50 rounded border border-blue-100">
                             <div>
                               <label className="block text-xs font-medium text-blue-700 mb-1">Manufacture Date</label>
-                              <input
+                              <DateInput
                                 data-mfd={row.id}
-                                type="date"
                                 value={row.manufacture_date}
                                 onChange={(e) => updateRow(row.id, 'manufacture_date', e.target.value)}
                                 onKeyDown={(e) => handleMfdKeyDown(e, row)}
@@ -499,9 +615,45 @@ export default function StockEntryEdit() {
                             </div>
                             <div>
                               <label className="block text-xs font-medium text-blue-700 mb-1">Expiry Date</label>
-                              <input
+                              <DateInput
                                 data-expiry={row.id}
-                                type="date"
+                                value={row.expiry_date}
+                                onChange={(e) => updateRow(row.id, 'expiry_date', e.target.value)}
+                                onKeyDown={(e) => handleExpiryKeyDown(e, row)}
+                                className="w-full border border-blue-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                              />
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        /* New batch mode */
+                        <>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Batch Number</label>
+                            <input
+                              data-batch-input={row.id}
+                              type="text"
+                              value={row.batch_number}
+                              onChange={(e) => updateRow(row.id, 'batch_number', e.target.value)}
+                              onKeyDown={(e) => handleBatchNumberKeyDown(e, row)}
+                              className="w-full sm:w-64 border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3 p-3 bg-blue-50 rounded border border-blue-100">
+                            <div>
+                              <label className="block text-xs font-medium text-blue-700 mb-1">Manufacture Date</label>
+                              <DateInput
+                                data-mfd={row.id}
+                                value={row.manufacture_date}
+                                onChange={(e) => updateRow(row.id, 'manufacture_date', e.target.value)}
+                                onKeyDown={(e) => handleMfdKeyDown(e, row)}
+                                className="w-full border border-blue-200 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-blue-700 mb-1">Expiry Date</label>
+                              <DateInput
+                                data-expiry={row.id}
                                 value={row.expiry_date}
                                 onChange={(e) => updateRow(row.id, 'expiry_date', e.target.value)}
                                 onKeyDown={(e) => handleExpiryKeyDown(e, row)}
@@ -522,15 +674,31 @@ export default function StockEntryEdit() {
               </div>
             ))}
           </div>
+
+          {/* Add item button at bottom too for convenience */}
+          <div className="px-5 py-3 border-t border-gray-200 bg-gray-50">
+            <button
+              type="button"
+              onClick={addRow}
+              className="text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors"
+            >
+              + Add another item
+            </button>
+          </div>
         </div>
 
         {/* Summary + Actions */}
         <div className="bg-white rounded-lg shadow p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="text-sm text-gray-500">
-            <span className="font-medium text-gray-700">{rows.length}</span> item{rows.length > 1 ? 's' : ''} &middot;{' '}
+            <span className="font-medium text-gray-700">{rows.length}</span> item{rows.length !== 1 ? 's' : ''} &middot;{' '}
             <span className="font-medium text-gray-700">
               {rows.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0)}
             </span> total qty
+            {rows.some((r) => isNewRow(r)) && (
+              <span className="ml-2 text-green-600 text-xs">
+                ({rows.filter((r) => isNewRow(r)).length} new)
+              </span>
+            )}
           </div>
           <div className="flex gap-3">
             <button
@@ -543,7 +711,7 @@ export default function StockEntryEdit() {
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || rows.length === 0}
               className="px-5 py-2 bg-yellow-500 text-gray-900 rounded hover:bg-yellow-600 font-semibold text-sm disabled:opacity-50 transition-colors"
             >
               {saving ? 'Saving...' : 'Save All'} <span className="text-xs opacity-60 ml-1">(Shift+Enter)</span>
