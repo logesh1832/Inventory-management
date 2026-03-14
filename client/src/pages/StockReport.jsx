@@ -1,18 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-
 const stockBadge = (qty) => {
   if (qty < 50) return 'bg-red-100 text-red-700';
   if (qty <= 200) return 'bg-yellow-100 text-yellow-700';
   return 'bg-green-100 text-green-700';
-};
-
-const barColor = (qty) => {
-  if (qty < 50) return '#ef4444';
-  if (qty <= 200) return '#eab308';
-  return '#22c55e';
 };
 
 export default function StockReport() {
@@ -66,31 +58,6 @@ export default function StockReport() {
         </label>
       </div>
 
-      {/* Bar Chart */}
-      {!loading && stock.length > 0 && (
-        <div className="bg-white rounded shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Stock Levels by Product</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={stock} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="product_code" tick={{ fontSize: 12 }} />
-              <YAxis />
-              <Tooltip
-                formatter={(value) => [value, 'Stock']}
-                labelFormatter={(label) => {
-                  const p = stock.find((s) => s.product_code === label);
-                  return p ? p.product_name : label;
-                }}
-              />
-              <Bar dataKey="total_stock" radius={[4, 4, 0, 0]}>
-                {stock.map((entry, index) => (
-                  <Cell key={index} fill={barColor(entry.total_stock)} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
 
       {/* Search */}
       <div className="flex flex-wrap gap-3 items-end">

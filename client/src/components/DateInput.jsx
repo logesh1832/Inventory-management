@@ -1,12 +1,10 @@
-import { useRef, forwardRef } from 'react';
+import { forwardRef } from 'react';
 
 /**
  * Custom date input that always displays dd/mm/yyyy regardless of OS locale.
- * Internally stores value as yyyy-mm-dd for API compatibility.
+ * Uses native date input for full picker functionality, overlays dd/mm/yyyy text.
  */
 const DateInput = forwardRef(function DateInput({ value, onChange, className = '', ...rest }, ref) {
-  const hiddenRef = useRef(null);
-
   // Convert yyyy-mm-dd → dd/mm/yyyy for display
   const displayValue = (() => {
     if (!value) return '';
@@ -15,38 +13,27 @@ const DateInput = forwardRef(function DateInput({ value, onChange, className = '
     return `${parts[2]}/${parts[1]}/${parts[0]}`;
   })();
 
-  // When native picker changes, update value
-  const handlePickerChange = (e) => {
-    onChange({ target: { value: e.target.value, name: rest.name } });
-  };
-
-  const openPicker = () => {
-    if (hiddenRef.current) {
-      hiddenRef.current.showPicker?.();
-    }
-  };
-
   return (
-    <div className="relative">
+    <div className="relative inline-block w-full">
+      {/* Native date input — fully functional but text is transparent */}
       <input
         ref={ref}
-        type="text"
-        value={displayValue}
-        onChange={() => {}}
-        placeholder="dd/mm/yyyy"
-        className={className}
-        {...rest}
-        onClick={openPicker}
-        readOnly
-      />
-      <input
-        ref={hiddenRef}
         type="date"
         value={value || ''}
-        onChange={handlePickerChange}
-        className="absolute inset-0 opacity-0 cursor-pointer"
-        tabIndex={-1}
+        onChange={(e) => {
+          onChange({ target: { value: e.target.value, name: rest.name } });
+        }}
+        className={className}
+        {...rest}
+        style={{ color: 'transparent', caretColor: 'transparent', ...rest.style }}
       />
+      {/* Overlay showing dd/mm/yyyy — clicks pass through to native input */}
+      <span
+        className="absolute left-0 top-0 h-full flex items-center px-3 text-sm pointer-events-none"
+        style={{ color: value ? '#374151' : '#9ca3af' }}
+      >
+        {displayValue || 'dd/mm/yyyy'}
+      </span>
     </div>
   );
 });
