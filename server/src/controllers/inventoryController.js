@@ -204,7 +204,7 @@ const getMovementsBySupplier = async (req, res, next) => {
     const baseFrom = `
       FROM stock_movements sm
       LEFT JOIN customers c ON c.id = sm.supplier_id
-      WHERE sm.movement_type = 'IN'
+      WHERE sm.movement_type = 'IN' AND sm.supplier_id IS NOT NULL
     `;
     const conditions = [];
     const params = [];

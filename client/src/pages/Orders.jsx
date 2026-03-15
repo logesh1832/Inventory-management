@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
@@ -22,6 +22,7 @@ export default function Orders() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -72,6 +73,57 @@ export default function Orders() {
       showToast(err.response?.data?.error || 'Failed to delete order', 'error');
     }
   };
+
+  // Reset selectedIndex when orders data changes
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [orders]);
+
+  // Keyboard navigation handler
+  const handleKeyDown = useCallback((e) => {
+    if (loading || orders.length === 0) return;
+    // Don't intercept when user is typing in an input/select
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedIndex((prev) => Math.min(prev + 1, orders.length - 1));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedIndex((prev) => Math.max(prev - 1, 0));
+        break;
+      case 'Enter': {
+        e.preventDefault();
+        const order = orders[selectedIndex];
+        if (order) navigate(`/orders/${order.id}`);
+        break;
+      }
+      case 'e':
+      case 'E': {
+        e.preventDefault();
+        const order = orders[selectedIndex];
+        if (order) navigate(`/orders/${order.id}/edit`);
+        break;
+      }
+      case 'd':
+      case 'D': {
+        e.preventDefault();
+        const order = orders[selectedIndex];
+        if (order) handleDeleteOrder(order.id, order.invoice_number);
+        break;
+      }
+      default:
+        break;
+    }
+  }, [loading, orders, selectedIndex, navigate, handleDeleteOrder]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   return (
     <div>
@@ -138,6 +190,13 @@ export default function Orders() {
         </div>
       </div>
 
+      <div className="mb-4 flex flex-wrap gap-3 text-xs text-gray-500 bg-gray-50 rounded px-3 py-2">
+        <span><kbd className="px-1.5 py-0.5 bg-gray-200 rounded font-mono text-gray-700">↑↓</kbd> Navigate</span>
+        <span><kbd className="px-1.5 py-0.5 bg-gray-200 rounded font-mono text-gray-700">Enter</kbd> View</span>
+        <span><kbd className="px-1.5 py-0.5 bg-gray-200 rounded font-mono text-gray-700">E</kbd> Edit</span>
+        <span><kbd className="px-1.5 py-0.5 bg-gray-200 rounded font-mono text-gray-700">D</kbd> Delete</span>
+      </div>
+
       {loading ? (
         <p className="text-gray-500">Loading...</p>
       ) : orders.length === 0 ? (
@@ -146,11 +205,13 @@ export default function Orders() {
         <>
         {/* Mobile cards */}
         <div className="md:hidden space-y-3">
-          {orders.map((o) => (
+          {orders.map((o, idx) => (
             <div
               key={o.id}
-              onClick={() => navigate(`/orders/${o.id}`)}
-              className="bg-white rounded-lg shadow p-4 space-y-2 cursor-pointer active:bg-gray-50"
+              onClick={() => { setSelectedIndex(idx); navigate(`/orders/${o.id}`); }}
+              className={`rounded-lg shadow p-4 space-y-2 cursor-pointer active:bg-gray-50 ${
+                idx === selectedIndex ? 'bg-yellow-50 ring-2 ring-yellow-400' : 'bg-white'
+              }`}
             >
               <div className="flex items-center justify-between">
                 <span className="font-medium text-gray-900">{o.invoice_number}</span>
@@ -203,11 +264,15 @@ export default function Orders() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {orders.map((o) => (
+              {orders.map((o, idx) => (
                 <tr
                   key={o.id}
-                  onClick={() => navigate(`/orders/${o.id}`)}
-                  className="hover:bg-gray-50 cursor-pointer"
+                  onClick={() => { setSelectedIndex(idx); navigate(`/orders/${o.id}`); }}
+                  className={`cursor-pointer ${
+                    idx === selectedIndex
+                      ? 'bg-yellow-50 ring-2 ring-inset ring-yellow-400'
+                      : 'hover:bg-gray-50'
+                  }`}
                 >
                   <td className="px-6 py-4 whitespace-nowrap font-medium">{o.invoice_number}</td>
                   <td className="px-6 py-4 whitespace-nowrap">{o.customer_name}</td>

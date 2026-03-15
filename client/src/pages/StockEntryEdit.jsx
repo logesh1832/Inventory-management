@@ -319,12 +319,16 @@ export default function StockEntryEdit() {
     }
   };
 
-  // Keyboard: Shift+Enter = save from anywhere
+  // Keyboard: Shift+Enter = save, Ctrl+I = add item
   useEffect(() => {
     const handleKey = (e) => {
       if (e.shiftKey && e.key === 'Enter') {
         e.preventDefault();
         formRef.current?.requestSubmit();
+      }
+      if (e.ctrlKey && e.key === 'i') {
+        e.preventDefault();
+        addRow();
       }
     };
     window.addEventListener('keydown', handleKey);
@@ -427,6 +431,7 @@ export default function StockEntryEdit() {
       <div className="flex flex-wrap gap-3 mb-4 text-xs text-gray-400">
         <span className="bg-gray-100 px-2 py-1 rounded"><kbd className="font-mono font-semibold text-gray-500">Enter</kbd> next field</span>
         <span className="bg-gray-100 px-2 py-1 rounded"><kbd className="font-mono font-semibold text-gray-500">Tab</kbd> switch batch mode</span>
+        <span className="bg-gray-100 px-2 py-1 rounded"><kbd className="font-mono font-semibold text-gray-500">Ctrl+I</kbd> add item</span>
         <span className="bg-gray-100 px-2 py-1 rounded"><kbd className="font-mono font-semibold text-gray-500">Shift+Enter</kbd> save all</span>
       </div>
 

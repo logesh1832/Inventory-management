@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { fmtDate } from '../utils/date';
 
 export default function OrderDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
@@ -13,6 +14,18 @@ export default function OrderDetail() {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const tag = e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable) return;
+      if (e.key === 'e' || e.key === 'E') { navigate(`/orders/${id}/edit`); }
+      if (e.key === 'p' || e.key === 'P') { e.preventDefault(); window.print(); }
+      if (e.key === 'Escape') { navigate('/orders'); }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [id, navigate]);
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -42,6 +55,12 @@ export default function OrderDetail() {
           {toast.message}
         </div>
       )}
+
+      <div className="flex flex-wrap gap-3 mb-4 text-xs text-gray-400 no-print">
+        <span><kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-gray-600 font-mono">E</kbd> Edit</span>
+        <span><kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-gray-600 font-mono">P</kbd> Print</span>
+        <span><kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-gray-600 font-mono">Esc</kbd> Back</span>
+      </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 no-print">
         <h2 className="text-2xl font-bold text-gray-800">Material Out Detail</h2>

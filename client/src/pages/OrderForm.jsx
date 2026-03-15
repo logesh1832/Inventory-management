@@ -283,6 +283,22 @@ export default function OrderForm() {
 
   // --- Keyboard handlers ---
 
+  // Keyboard: Shift+Enter = save, Ctrl+I = add item
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.shiftKey && e.key === 'Enter') {
+        e.preventDefault();
+        formRef.current?.requestSubmit();
+      }
+      if (e.ctrlKey && e.key === 'i') {
+        e.preventDefault();
+        addItem();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, []);
+
   // Date → Enter → first product
   const handleDateKeyDown = (e) => {
     if (e.key === 'Enter') {
@@ -453,6 +469,7 @@ export default function OrderForm() {
       {/* Keyboard shortcut hints */}
       <div className="flex flex-wrap gap-3 mb-4 text-xs text-gray-400">
         <span className="bg-gray-100 px-2 py-1 rounded"><kbd className="font-mono font-semibold text-gray-500">Enter</kbd> next field / add item</span>
+        <span className="bg-gray-100 px-2 py-1 rounded"><kbd className="font-mono font-semibold text-gray-500">Ctrl+I</kbd> add item</span>
         <span className="bg-gray-100 px-2 py-1 rounded"><kbd className="font-mono font-semibold text-gray-500">Shift+Enter</kbd> save</span>
       </div>
 

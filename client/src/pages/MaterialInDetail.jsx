@@ -49,6 +49,29 @@ export default function MaterialInDetail() {
   const totalQty = entries.reduce((sum, e) => sum + e.quantity, 0);
   const firstEntryId = entries.length > 0 ? entries[0].id : null;
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const tag = e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable) return;
+
+      switch (e.key.toLowerCase()) {
+        case 'e':
+          if (firstEntryId) navigate(`/batches/stock-entries/${firstEntryId}/edit`);
+          break;
+        case 'p':
+          e.preventDefault();
+          window.print();
+          break;
+        case 'escape':
+          navigate('/batches');
+          break;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [firstEntryId, navigate]);
+
   if (loading) return <p className="text-gray-500">Loading...</p>;
 
   return (
@@ -58,6 +81,12 @@ export default function MaterialInDetail() {
           {toast.message}
         </div>
       )}
+
+      <div className="flex flex-wrap gap-3 mb-4 text-xs text-gray-400 no-print">
+        <span><kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-[10px] font-mono">E</kbd> Edit</span>
+        <span><kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-[10px] font-mono">P</kbd> Print</span>
+        <span><kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-[10px] font-mono">Esc</kbd> Back</span>
+      </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 no-print">
         <h2 className="text-2xl font-bold text-gray-800">Material In Detail</h2>

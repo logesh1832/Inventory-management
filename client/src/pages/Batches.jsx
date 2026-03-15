@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
@@ -25,6 +25,7 @@ export default function Batches() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -69,6 +70,51 @@ export default function Batches() {
     setPage(pg);
     fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, pg);
   };
+
+  // Reset selectedIndex when entries data changes
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [entries]);
+
+  const handleKeyDown = useCallback((e) => {
+    if (tab !== 'entries' || entries.length === 0) return;
+    // Don't intercept if user is typing in an input/select/textarea
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+
+    const g = entries[selectedIndex];
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedIndex((prev) => Math.min(prev + 1, entries.length - 1));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedIndex((prev) => Math.max(prev - 1, 0));
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (g) navigate(`/batches/view?supplier=${g.supplier_id}&date=${toDateStr(g.received_date)}`);
+        break;
+      case 'e':
+      case 'E':
+        e.preventDefault();
+        if (g) navigate(`/batches/stock-entries/${g.first_entry_id}/edit`);
+        break;
+      case 'd':
+      case 'D':
+        e.preventDefault();
+        if (g) handleDeleteGroup(g.supplier_id, g.received_date, g.supplier_name);
+        break;
+      default:
+        break;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, entries, selectedIndex, navigate]);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   const handleDeleteGroup = async (supplierId, receivedDate, supplierName) => {
     if (!window.confirm(`Are you sure you want to delete ALL stock entries from ${supplierName} on ${fmtDate(receivedDate)}? This will reverse batch quantities.`)) return;
@@ -165,6 +211,16 @@ export default function Batches() {
         </div>
       </div>
 
+      {/* Keyboard shortcuts hint */}
+      {tab === 'entries' && entries.length > 0 && !loading && (
+        <div className="hidden md:flex gap-4 mb-3 px-3 py-1.5 bg-gray-50 rounded text-xs text-gray-500 border border-gray-200 w-fit">
+          <span><kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px] font-mono">&uarr;&darr;</kbd> Navigate</span>
+          <span><kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px] font-mono">Enter</kbd> View</span>
+          <span><kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px] font-mono">E</kbd> Edit</span>
+          <span><kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px] font-mono">D</kbd> Delete</span>
+        </div>
+      )}
+
       {loading ? (
         <p className="text-gray-500">Loading...</p>
       ) : tab === 'entries' ? (
@@ -175,11 +231,11 @@ export default function Batches() {
           <>
           {/* Mobile cards - supplier groups */}
           <div className="md:hidden space-y-3">
-            {entries.map((g) => (
+            {entries.map((g, idx) => (
               <div
                 key={`${g.supplier_id}-${g.received_date}`}
-                className="bg-white rounded-lg shadow p-4 space-y-2 cursor-pointer active:bg-gray-50"
-                onClick={() => navigate(`/batches/view?supplier=${g.supplier_id}&date=${toDateStr(g.received_date)}`)}
+                className={`bg-white rounded-lg shadow p-4 space-y-2 cursor-pointer active:bg-gray-50 ${selectedIndex === idx ? 'ring-2 ring-yellow-400 bg-yellow-50' : ''}`}
+                onClick={() => { setSelectedIndex(idx); navigate(`/batches/view?supplier=${g.supplier_id}&date=${toDateStr(g.received_date)}`); }}
               >
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-gray-900">{g.supplier_name}</span>
@@ -232,11 +288,11 @@ export default function Batches() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {entries.map((g) => (
+                {entries.map((g, idx) => (
                   <tr
                     key={`${g.supplier_id}-${g.received_date}`}
-                    className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => navigate(`/batches/view?supplier=${g.supplier_id}&date=${toDateStr(g.received_date)}`)}
+                    className={`cursor-pointer ${selectedIndex === idx ? 'bg-yellow-50 ring-2 ring-inset ring-yellow-400' : 'hover:bg-gray-50'}`}
+                    onClick={() => { setSelectedIndex(idx); navigate(`/batches/view?supplier=${g.supplier_id}&date=${toDateStr(g.received_date)}`); }}
                   >
                     <td className="px-5 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">
                       {g.voucher_number || '\u2014'}
