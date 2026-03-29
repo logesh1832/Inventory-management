@@ -16,11 +16,12 @@ export default function ProductForm() {
     product_code: '',
     unit: 'Pieces',
     status: 'active',
-    unit_price: '',
     category: '',
     batch_tracking: false,
     qty_per_box: '',
   });
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState(null);
@@ -42,11 +43,11 @@ export default function ProductForm() {
             product_code: data.product_code,
             unit: data.unit,
             status: data.status,
-            unit_price: data.unit_price || '',
             category: data.category || '',
             batch_tracking: data.batch_tracking || false,
             qty_per_box: data.qty_per_box || '',
           });
+          if (data.image_url) setImagePreview(data.image_url);
         })
         .catch(() => showToast('Failed to load product', 'error'))
         .finally(() => setLoading(false));
@@ -66,9 +67,6 @@ export default function ProductForm() {
     if (form.unit === 'Boxes' && (!form.qty_per_box || Number(form.qty_per_box) <= 0)) {
       newErrors.qty_per_box = 'Quantity per box is required';
     }
-    if (form.unit_price !== '' && (isNaN(form.unit_price) || Number(form.unit_price) < 0)) {
-      newErrors.unit_price = 'Price must be a positive number';
-    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -81,27 +79,41 @@ export default function ProductForm() {
     }
   };
 
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview('');
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
     setSubmitting(true);
     try {
-      const payload = {
-        product_name: form.product_name,
-        product_code: form.product_code,
-        unit: form.unit,
-        unit_price: form.unit_price ? Number(form.unit_price) : 0,
-        category: form.category || null,
-        batch_tracking: form.batch_tracking,
-        qty_per_box: form.unit === 'Boxes' ? Number(form.qty_per_box) || null : null,
-      };
+      const formData = new FormData();
+      formData.append('product_name', form.product_name);
+      formData.append('product_code', form.product_code);
+      formData.append('unit', form.unit);
+      formData.append('category', form.category);
+      formData.append('batch_tracking', form.batch_tracking);
+      formData.append('qty_per_box', form.qty_per_box || '');
+      if (imageFile) formData.append('image', imageFile);
+
+      const config = { headers: { 'Content-Type': 'multipart/form-data' } };
 
       if (isEdit) {
-        payload.status = form.status;
-        await api.put(`/products/${id}`, payload);
+        formData.append('status', form.status);
+        await api.put(`/products/${id}`, formData, config);
       } else {
-        await api.post('/products', payload);
+        await api.post('/products', formData, config);
       }
       navigate('/products');
     } catch (err) {
@@ -172,20 +184,38 @@ export default function ProductForm() {
           />
         </div>
 
-        {/* Unit Price */}
+        {/* Product Image */}
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Unit Price (Rs.)</label>
-          <input
-            type="number"
-            name="unit_price"
-            value={form.unit_price}
-            onChange={handleChange}
-            min="0"
-            step="0.01"
-            placeholder="0.00"
-            className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 ${errors.unit_price ? 'border-red-500' : 'border-gray-300'}`}
-          />
-          {errors.unit_price && <p className="text-red-500 text-xs mt-1">{errors.unit_price}</p>}
+          <label className="block text-sm font-medium text-gray-700 mb-1">Product Image</label>
+          {imagePreview ? (
+            <div className="relative inline-block">
+              <img
+                src={imagePreview}
+                alt="Product preview"
+                className="h-32 w-32 object-cover rounded border border-gray-300"
+              />
+              <button
+                type="button"
+                onClick={removeImage}
+                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-red-600 shadow"
+              >
+                &times;
+              </button>
+            </div>
+          ) : (
+            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded cursor-pointer hover:border-yellow-500 hover:bg-gray-50 transition-colors">
+              <svg className="w-8 h-8 text-gray-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span className="text-sm text-gray-500">Click to upload product image</span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                onChange={handleImageChange}
+                className="hidden"
+              />
+            </label>
+          )}
         </div>
 
         {/* Unit */}

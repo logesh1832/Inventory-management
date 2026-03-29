@@ -3,17 +3,18 @@ const pool = require('../config/db');
 // POST /api/products
 const createProduct = async (req, res, next) => {
   try {
-    const { product_name, product_code, unit, unit_price, category, batch_tracking, qty_per_box } = req.body;
+    const { product_name, product_code, unit, category, batch_tracking, qty_per_box } = req.body;
+    const image_url = req.file ? `/uploads/products/${req.file.filename}` : null;
 
     if (!product_name || !product_code || !unit) {
       return res.status(400).json({ error: 'product_name, product_code, and unit are required' });
     }
 
     const result = await pool.query(
-      `INSERT INTO products (product_name, product_code, unit, unit_price, category, batch_tracking, qty_per_box)
+      `INSERT INTO products (product_name, product_code, unit, category, batch_tracking, qty_per_box, image_url)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [product_name.trim(), product_code.trim(), unit.trim(), unit_price || 0, category?.trim() || null, batch_tracking || false, unit === 'Boxes' && qty_per_box ? Number(qty_per_box) : null]
+      [product_name.trim(), product_code.trim(), unit.trim(), category?.trim() || null, batch_tracking || false, unit === 'Boxes' && qty_per_box ? Number(qty_per_box) : null, image_url]
     );
 
     res.status(201).json(result.rows[0]);
@@ -104,20 +105,21 @@ const getProductById = async (req, res, next) => {
 const updateProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { product_name, unit, status, unit_price, category, batch_tracking, qty_per_box } = req.body;
+    const { product_name, unit, status, category, batch_tracking, qty_per_box } = req.body;
+    const image_url = req.file ? `/uploads/products/${req.file.filename}` : null;
 
     const result = await pool.query(
       `UPDATE products
        SET product_name = COALESCE($1, product_name),
            unit = COALESCE($2, unit),
            status = COALESCE($3, status),
-           unit_price = COALESCE($4, unit_price),
-           category = COALESCE($5, category),
-           batch_tracking = $6,
-           qty_per_box = $7
+           category = COALESCE($4, category),
+           batch_tracking = $5,
+           qty_per_box = $6,
+           image_url = COALESCE($7, image_url)
        WHERE id = $8
        RETURNING *`,
-      [product_name, unit, status, unit_price, category, batch_tracking !== undefined ? batch_tracking : false, unit === 'Boxes' && qty_per_box ? Number(qty_per_box) : null, id]
+      [product_name, unit, status, category, batch_tracking !== undefined ? batch_tracking : false, unit === 'Boxes' && qty_per_box ? Number(qty_per_box) : null, image_url, id]
     );
 
     if (result.rows.length === 0) {

@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS products (
     product_code VARCHAR(100) NOT NULL UNIQUE,
     unit VARCHAR(50) NOT NULL DEFAULT 'pcs',
     qty_per_box INTEGER DEFAULT NULL,
+    image_url TEXT,
     unit_price DECIMAL(10,2) DEFAULT 0,
     category VARCHAR(100),
     batch_tracking BOOLEAN DEFAULT false,
@@ -162,6 +163,10 @@ BEGIN
     -- stock_movements: voucher_number
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'stock_movements' AND column_name = 'voucher_number') THEN
         ALTER TABLE stock_movements ADD COLUMN voucher_number VARCHAR(100);
+    END IF;
+    -- products: image_url
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'image_url') THEN
+        ALTER TABLE products ADD COLUMN image_url TEXT;
     END IF;
 END $$;
 

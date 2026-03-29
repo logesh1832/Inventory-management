@@ -52,10 +52,6 @@ export default function Products() {
     }
   };
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(price || 0);
-  };
-
   const filtered = products.filter((p) => {
     if (!search) return true;
     const term = search.toLowerCase();
@@ -128,12 +124,21 @@ export default function Products() {
             {filtered.map((product) => (
               <div key={product.id} className="bg-white rounded-lg shadow p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-gray-900">
-                    {product.product_name}
-                    {product.batch_tracking && (
-                      <span className="ml-2 inline-block px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-50 text-blue-600">BT</span>
+                  <div className="flex items-center gap-2">
+                    {product.image_url ? (
+                      <img src={product.image_url} alt={product.product_name} className="h-10 w-10 rounded object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="h-10 w-10 rounded bg-gray-200 flex items-center justify-center flex-shrink-0">
+                        <span className="text-xs font-bold text-gray-400">{product.product_name.charAt(0).toUpperCase()}</span>
+                      </div>
                     )}
-                  </span>
+                    <span className="font-medium text-gray-900">
+                      {product.product_name}
+                      {product.batch_tracking && (
+                        <span className="ml-2 inline-block px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-50 text-blue-600">BT</span>
+                      )}
+                    </span>
+                  </div>
                   {!isSalesperson && (
                     <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
                       product.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
@@ -150,9 +155,6 @@ export default function Products() {
                   {product.category ? (
                     <span className="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700">{product.category}</span>
                   ) : '-'}
-                </div>
-                <div className="text-sm text-gray-500">
-                  <span className="text-gray-400">Price:</span> <span className="font-medium text-gray-900">{formatPrice(product.unit_price)}</span>
                 </div>
                 {!isSalesperson && (
                   <div className="text-sm text-gray-500">
@@ -181,10 +183,10 @@ export default function Products() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b">
                 <tr>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Product Name</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                  <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
                   {!isSalesperson && (
                     <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
                   )}
@@ -200,6 +202,15 @@ export default function Products() {
               <tbody className="divide-y divide-gray-200">
                 {filtered.map((product) => (
                   <tr key={product.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      {product.image_url ? (
+                        <img src={product.image_url} alt={product.product_name} className="h-8 w-8 rounded object-cover" />
+                      ) : (
+                        <div className="h-8 w-8 rounded bg-gray-200 flex items-center justify-center">
+                          <span className="text-xs font-bold text-gray-400">{product.product_name.charAt(0).toUpperCase()}</span>
+                        </div>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-sm text-gray-900">
                       {product.product_name}
                       {product.batch_tracking && (
@@ -214,7 +225,6 @@ export default function Products() {
                         </span>
                       ) : '-'}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 text-right font-medium">{formatPrice(product.unit_price)}</td>
                     {!isSalesperson && (
                       <td className="px-6 py-4 text-right">
                         <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
