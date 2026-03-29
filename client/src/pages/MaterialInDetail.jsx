@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import api from '../services/api';
+import api, { getFileUrl } from '../services/api';
 import { fmtDate } from '../utils/date';
 
 export default function MaterialInDetail() {
@@ -163,13 +163,24 @@ export default function MaterialInDetail() {
                 <tr key={e.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm text-gray-400">{idx + 1}</td>
                   <td className="px-4 py-3 text-sm">
-                    <span className="font-medium text-gray-800">{e.product_name}</span>
-                    <span className="text-gray-400 text-xs ml-1">({e.product_code})</span>
-                    {e.unit === 'Boxes' && e.qty_per_box && (
-                      <span className="text-xs text-blue-500 ml-2">
-                        {e.quantity} x {e.qty_per_box} = {e.quantity * e.qty_per_box} pcs
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {e.image_url ? (
+                        <img src={getFileUrl(e.image_url)} alt="" className="h-8 w-8 rounded object-cover flex-shrink-0" />
+                      ) : (
+                        <div className="h-8 w-8 rounded bg-gray-100 flex items-center justify-center flex-shrink-0">
+                          <span className="text-gray-400 text-xs font-bold">{(e.product_name || '?')[0]}</span>
+                        </div>
+                      )}
+                      <div>
+                        <span className="font-medium text-gray-800">{e.product_name}</span>
+                        <span className="text-gray-400 text-xs ml-1">({e.product_code})</span>
+                        {e.unit === 'Boxes' && e.qty_per_box && (
+                          <span className="text-xs text-blue-500 ml-2">
+                            {e.quantity} x {e.qty_per_box} = {e.quantity * e.qty_per_box} pcs
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-sm">
                     {e.batch_number ? (

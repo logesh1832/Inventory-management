@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import api from '../services/api';
+import api, { getFileUrl } from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
 import DateInput from '../components/DateInput';
 import { fmtDate } from '../utils/date';
@@ -527,7 +527,15 @@ export default function OrderForm() {
               return (
                 <div key={item.id} className={`px-5 py-4 ${errors[item.id] ? 'bg-red-50' : ''}`}>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-semibold text-gray-400">ITEM {idx + 1}</span>
+                    <div className="flex items-center gap-2">
+                      {item.product_id && (() => {
+                        const prod = products.find(p => p.id === item.product_id);
+                        return prod?.image_url ? (
+                          <img src={getFileUrl(prod.image_url)} alt="" className="h-14 w-14 rounded object-cover" />
+                        ) : null;
+                      })()}
+                      <span className="text-xs font-semibold text-gray-400">ITEM {idx + 1}</span>
+                    </div>
                     {items.length > 1 && (
                       <button
                         type="button"

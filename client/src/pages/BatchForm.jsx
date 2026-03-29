@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import api, { getFileUrl } from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
 import DateInput from '../components/DateInput';
 
@@ -371,7 +371,15 @@ export default function BatchForm() {
               <div key={row.id} className={`px-5 py-4 ${errors[row.id] ? 'bg-red-50' : ''}`}>
                 {/* Row header */}
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-semibold text-gray-400">ITEM {idx + 1}</span>
+                  <div className="flex items-center gap-2">
+                    {row.product_id && (() => {
+                      const prod = products.find(p => p.id === row.product_id);
+                      return prod?.image_url ? (
+                        <img src={getFileUrl(prod.image_url)} alt="" className="h-14 w-14 rounded object-cover" />
+                      ) : null;
+                    })()}
+                    <span className="text-xs font-semibold text-gray-400">ITEM {idx + 1}</span>
+                  </div>
                   {rows.length > 1 && (
                     <button
                       type="button"

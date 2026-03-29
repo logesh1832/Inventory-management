@@ -244,7 +244,7 @@ const getOrderById = async (req, res, next) => {
     const order = orderResult.rows[0];
 
     const itemsResult = await pool.query(
-      `SELECT oi.*, p.product_name, p.product_code, p.unit, p.qty_per_box
+      `SELECT oi.*, p.product_name, p.product_code, p.unit, p.qty_per_box, p.image_url
        FROM order_items oi
        JOIN products p ON p.id = oi.product_id
        WHERE oi.order_id = $1`,

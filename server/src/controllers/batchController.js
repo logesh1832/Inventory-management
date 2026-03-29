@@ -207,7 +207,7 @@ const getAllBatches = async (req, res, next) => {
     const offset = (Number(page) - 1) * Number(limit);
     params.push(Number(limit));
     params.push(offset);
-    const dataQuery = `SELECT b.*, p.product_name ${baseFrom}${whereClause} ORDER BY b.received_date DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
+    const dataQuery = `SELECT b.*, p.product_name, p.image_url ${baseFrom}${whereClause} ORDER BY b.received_date DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
 
     const result = await pool.query(dataQuery, params);
     res.json({ data: result.rows, total, page: Number(page), limit: Number(limit) });
@@ -468,7 +468,7 @@ const getStockEntrySiblings = async (req, res, next) => {
       `SELECT sm.id, sm.quantity, sm.supplier_id, sm.voucher_number,
               COALESCE(sm.received_date, sm.created_at::date)::date AS received_date,
               sm.product_id, sm.batch_id,
-              p.product_name, p.product_code, p.batch_tracking,
+              p.product_name, p.product_code, p.batch_tracking, p.image_url,
               ib.batch_number, ib.manufacture_date, ib.expiry_date,
               c.customer_name AS supplier_name
        FROM stock_movements sm
@@ -561,7 +561,7 @@ const getStockEntriesByGroup = async (req, res, next) => {
       `SELECT sm.id, sm.quantity, sm.supplier_id, sm.voucher_number,
               COALESCE(sm.received_date, sm.created_at::date)::date AS received_date,
               sm.product_id, sm.batch_id,
-              p.product_name, p.product_code, p.batch_tracking, p.unit, p.qty_per_box,
+              p.product_name, p.product_code, p.batch_tracking, p.unit, p.qty_per_box, p.image_url,
               ib.batch_number, ib.manufacture_date, ib.expiry_date,
               c.customer_name AS supplier_name
        FROM stock_movements sm
