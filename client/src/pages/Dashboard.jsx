@@ -64,8 +64,8 @@ export default function Dashboard() {
             onClick={() => card.link && navigate(card.link)}
             className="bg-white rounded-lg shadow p-4 cursor-pointer hover:shadow-md transition-shadow"
           >
-            <p className="text-xs text-gray-500 mb-1">{card.label}</p>
-            <p className={`font-bold text-gray-800 ${card.isText ? 'text-base' : 'text-xl'}`}>{card.value}</p>
+            <p className="text-xs text-gray-500 mb-1 text-center">{card.label}</p>
+            <p className="font-bold text-gray-800 text-center text-3xl">{card.value}</p>
             <div className={`w-full h-1 rounded mt-2 ${card.color} opacity-30`} />
           </div>
         ))}
