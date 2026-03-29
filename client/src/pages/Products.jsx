@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../services/api';
+import api, { getFileUrl } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import SearchableSelect from '../components/SearchableSelect';
 
@@ -126,7 +126,7 @@ export default function Products() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     {product.image_url ? (
-                      <img src={product.image_url} alt={product.product_name} className="h-10 w-10 rounded object-cover flex-shrink-0" />
+                      <img src={getFileUrl(product.image_url)} alt={product.product_name} className="h-10 w-10 rounded object-cover flex-shrink-0" />
                     ) : (
                       <div className="h-10 w-10 rounded bg-gray-200 flex items-center justify-center flex-shrink-0">
                         <span className="text-xs font-bold text-gray-400">{product.product_name.charAt(0).toUpperCase()}</span>
@@ -204,7 +204,7 @@ export default function Products() {
                   <tr key={product.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       {product.image_url ? (
-                        <img src={product.image_url} alt={product.product_name} className="h-8 w-8 rounded object-cover" />
+                        <img src={getFileUrl(product.image_url)} alt={product.product_name} className="h-8 w-8 rounded object-cover" />
                       ) : (
                         <div className="h-8 w-8 rounded bg-gray-200 flex items-center justify-center">
                           <span className="text-xs font-bold text-gray-400">{product.product_name.charAt(0).toUpperCase()}</span>

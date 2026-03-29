@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import api from '../services/api';
+import api, { getFileUrl } from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
 
 const UNIT_OPTIONS = ['Pieces', 'Kg', 'Liters', 'Meters', 'Boxes', 'Rolls'];
@@ -47,7 +47,7 @@ export default function ProductForm() {
             batch_tracking: data.batch_tracking || false,
             qty_per_box: data.qty_per_box || '',
           });
-          if (data.image_url) setImagePreview(data.image_url);
+          if (data.image_url) setImagePreview(getFileUrl(data.image_url));
         })
         .catch(() => showToast('Failed to load product', 'error'))
         .finally(() => setLoading(false));
