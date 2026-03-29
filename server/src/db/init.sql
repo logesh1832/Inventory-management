@@ -112,6 +112,17 @@ CREATE INDEX IF NOT EXISTS idx_stock_movements_batch_id ON stock_movements(batch
 CREATE INDEX IF NOT EXISTS idx_stock_movements_supplier_id ON stock_movements(supplier_id);
 
 -- ============================================
+-- Roles table
+-- ============================================
+CREATE TABLE IF NOT EXISTS roles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL UNIQUE,
+    capabilities TEXT[] NOT NULL DEFAULT '{}',
+    is_system BOOLEAN DEFAULT false,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ============================================
 -- Migration: add columns if they don't exist (for existing databases)
 -- ============================================
 DO $$
@@ -151,5 +162,32 @@ BEGIN
     -- stock_movements: voucher_number
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'stock_movements' AND column_name = 'voucher_number') THEN
         ALTER TABLE stock_movements ADD COLUMN voucher_number VARCHAR(100);
+    END IF;
+END $$;
+
+-- ============================================
+-- Migration: create roles table and insert defaults
+-- ============================================
+DO $$
+BEGIN
+    -- Create roles table if not exists (handled above, but safe for standalone migration)
+    CREATE TABLE IF NOT EXISTS roles (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        name VARCHAR(100) NOT NULL UNIQUE,
+        capabilities TEXT[] NOT NULL DEFAULT '{}',
+        is_system BOOLEAN DEFAULT false,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+
+    -- Insert default admin role if not exists
+    IF NOT EXISTS (SELECT 1 FROM roles WHERE name = 'admin') THEN
+        INSERT INTO roles (name, capabilities, is_system)
+        VALUES ('admin', ARRAY['dashboard','products','categories','customers','material_in','movements','material_out','reports','user_management','role_management'], true);
+    END IF;
+
+    -- Insert default inventory role if not exists
+    IF NOT EXISTS (SELECT 1 FROM roles WHERE name = 'inventory') THEN
+        INSERT INTO roles (name, capabilities, is_system)
+        VALUES ('inventory', ARRAY['dashboard','products','categories','material_in','movements','material_out','reports'], true);
     END IF;
 END $$;

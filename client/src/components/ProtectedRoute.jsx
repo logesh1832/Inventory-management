@@ -27,8 +27,8 @@ export default function ProtectedRoute({ roles }) {
     return <Navigate to="/login" replace />;
   }
 
-  // Role check
-  if (roles && roles.length > 0 && !roles.includes(user.role)) {
+  // Role check (supports both role names and capabilities)
+  if (roles && roles.length > 0 && !roles.includes(user.role) && !(user.capabilities || []).some((c) => roles.includes(c))) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center p-8">

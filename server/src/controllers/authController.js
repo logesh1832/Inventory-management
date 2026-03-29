@@ -37,6 +37,13 @@ const login = async (req, res, next) => {
       return res.status(401).json({ error: { message: 'Invalid email or password.' } });
     }
 
+    // Fetch role capabilities
+    const roleResult = await pool.query(
+      'SELECT capabilities FROM roles WHERE name = $1',
+      [user.role]
+    );
+    const capabilities = roleResult.rows.length > 0 ? roleResult.rows[0].capabilities : [];
+
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
       JWT_SECRET,
@@ -51,6 +58,7 @@ const login = async (req, res, next) => {
         email: user.email,
         role: user.role,
         phone: user.phone,
+        capabilities,
       },
     });
   } catch (err) {
@@ -79,7 +87,16 @@ const getMe = async (req, res, next) => {
       return res.status(404).json({ error: { message: 'User not found.' } });
     }
 
-    res.json(result.rows[0]);
+    const user = result.rows[0];
+
+    // Fetch role capabilities
+    const roleResult = await pool.query(
+      'SELECT capabilities FROM roles WHERE name = $1',
+      [user.role]
+    );
+    user.capabilities = roleResult.rows.length > 0 ? roleResult.rows[0].capabilities : [];
+
+    res.json(user);
   } catch (err) {
     next(err);
   }

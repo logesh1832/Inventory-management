@@ -11,6 +11,7 @@ export default function UserManagement() {
   const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'inventory', phone: '' });
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [roles, setRoles] = useState([]);
 
   const fetchUsers = async () => {
     try {
@@ -20,7 +21,14 @@ export default function UserManagement() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchUsers(); }, []);
+  const fetchRoles = async () => {
+    try {
+      const res = await api.get('/roles');
+      setRoles(res.data);
+    } catch {}
+  };
+
+  useEffect(() => { fetchUsers(); fetchRoles(); }, []);
 
   const openAddModal = () => {
     setEditingUser(null);
@@ -113,8 +121,9 @@ export default function UserManagement() {
           className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
         >
           <option value="">All Roles</option>
-          <option value="admin">Admin</option>
-          <option value="inventory">Inventory</option>
+          {roles.map((r) => (
+            <option key={r.id} value={r.name}>{r.name.charAt(0).toUpperCase() + r.name.slice(1)}</option>
+          ))}
         </select>
       </div>
 
@@ -229,8 +238,9 @@ export default function UserManagement() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                 <select value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500">
-                  <option value="admin">Admin</option>
-                  <option value="inventory">Inventory</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.name}>{r.name.charAt(0).toUpperCase() + r.name.slice(1)}</option>
+                  ))}
                 </select>
               </div>
               <div>

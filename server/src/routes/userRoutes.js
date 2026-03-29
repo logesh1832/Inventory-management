@@ -3,8 +3,8 @@ const router = express.Router();
 const { getAllUsers, createUser, updateUser, toggleUserStatus } = require('../controllers/userController');
 const { authenticate, requireRole } = require('../middleware/auth');
 
-// All user routes require admin role
-router.use(authenticate, requireRole('admin'));
+// User routes require admin or inventory role
+router.use(authenticate, requireRole('admin', 'inventory'));
 
 router.get('/', getAllUsers);
 router.post('/', createUser);

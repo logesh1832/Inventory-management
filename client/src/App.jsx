@@ -21,6 +21,7 @@ import StockMovements from './pages/StockMovements';
 import ProductReport from './pages/ProductReport';
 import ProductMovementDetail from './pages/ProductMovementDetail';
 import UserManagement from './pages/UserManagement';
+import RoleManagement from './pages/RoleManagement';
 
 function App() {
   return (
@@ -54,10 +55,8 @@ function App() {
               <Route path="/product-report" element={<ProductReport />} />
               <Route path="/product-report/:id" element={<ProductMovementDetail />} />
 
-              {/* Admin-only route */}
-              <Route element={<ProtectedRoute roles={['admin']} />}>
-                <Route path="/users" element={<UserManagement />} />
-              </Route>
+              <Route path="/users" element={<UserManagement />} />
+              <Route path="/roles" element={<RoleManagement />} />
             </Route>
           </Route>
         </Routes>
