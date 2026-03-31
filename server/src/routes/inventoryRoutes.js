@@ -5,13 +5,11 @@ const {
   getLiveStock,
   getLiveStockByProduct,
   getStockReport,
-  getDashboardStats,
   getMovementsBySupplier,
   getMovementsByCustomer,
   getProductMovements,
 } = require('../controllers/inventoryController');
 
-router.get('/dashboard-stats', getDashboardStats);
 router.get('/live-stock', getLiveStock);
 router.get('/live-stock/:product_id', getLiveStockByProduct);
 router.get('/stock-report', getStockReport);

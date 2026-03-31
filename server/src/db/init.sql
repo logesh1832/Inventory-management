@@ -2,12 +2,35 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ============================================
+-- Organizations table (multi-tenant)
+-- ============================================
+CREATE TABLE IF NOT EXISTS organizations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  org_code VARCHAR(50) NOT NULL UNIQUE,
+  org_name VARCHAR(255) NOT NULL,
+  org_email VARCHAR(255) NOT NULL UNIQUE,
+  org_phone VARCHAR(50),
+  address TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_org_code ON organizations(org_code);
+
+-- ============================================
 -- Users table (referenced by customers.created_by)
 -- ============================================
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) UNIQUE,
+    email VARCHAR(255),
+    password_hash VARCHAR(255),
+    role VARCHAR(100) DEFAULT 'inventory',
+    phone VARCHAR(50),
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    is_super_admin BOOLEAN NOT NULL DEFAULT false,
+    org_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -16,7 +39,20 @@ CREATE TABLE IF NOT EXISTS users (
 -- ============================================
 CREATE TABLE IF NOT EXISTS units (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(100) NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL,
+    org_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ============================================
+-- Roles table
+-- ============================================
+CREATE TABLE IF NOT EXISTS roles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL,
+    capabilities TEXT[] NOT NULL DEFAULT '{}',
+    is_system BOOLEAN DEFAULT false,
+    org_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -26,7 +62,7 @@ CREATE TABLE IF NOT EXISTS units (
 CREATE TABLE IF NOT EXISTS products (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     product_name VARCHAR(255) NOT NULL,
-    product_code VARCHAR(100) NOT NULL UNIQUE,
+    product_code VARCHAR(100) NOT NULL,
     unit VARCHAR(50) NOT NULL DEFAULT 'pcs',
     sub_unit VARCHAR(50) DEFAULT NULL,
     qty_per_box INTEGER DEFAULT NULL,
@@ -36,6 +72,7 @@ CREATE TABLE IF NOT EXISTS products (
     category VARCHAR(100),
     batch_tracking BOOLEAN DEFAULT false,
     status VARCHAR(20) NOT NULL DEFAULT 'active',
+    org_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -49,6 +86,7 @@ CREATE TABLE IF NOT EXISTS customers (
     phone VARCHAR(50),
     email VARCHAR(255),
     created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    org_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -64,6 +102,7 @@ CREATE TABLE IF NOT EXISTS inventory_batches (
     received_date DATE NOT NULL DEFAULT CURRENT_DATE,
     manufacture_date DATE,
     expiry_date DATE,
+    org_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -72,12 +111,13 @@ CREATE TABLE IF NOT EXISTS inventory_batches (
 -- ============================================
 CREATE TABLE IF NOT EXISTS orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    invoice_number VARCHAR(100) NOT NULL UNIQUE,
+    invoice_number VARCHAR(100) NOT NULL,
     customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
     order_date DATE NOT NULL DEFAULT CURRENT_DATE,
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
     reference_number VARCHAR(100),
     party_name TEXT,
+    org_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -88,7 +128,8 @@ CREATE TABLE IF NOT EXISTS order_items (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
     product_id UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
-    quantity INTEGER NOT NULL DEFAULT 1
+    quantity INTEGER NOT NULL DEFAULT 1,
+    org_id UUID REFERENCES organizations(id) ON DELETE CASCADE
 );
 
 -- ============================================
@@ -107,6 +148,7 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     voucher_number VARCHAR(100),
     reference_number VARCHAR(100),
     party_name TEXT,
+    org_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -127,22 +169,124 @@ CREATE INDEX IF NOT EXISTS idx_stock_movements_product_id ON stock_movements(pro
 CREATE INDEX IF NOT EXISTS idx_stock_movements_batch_id ON stock_movements(batch_id);
 CREATE INDEX IF NOT EXISTS idx_stock_movements_supplier_id ON stock_movements(supplier_id);
 
--- ============================================
--- Roles table
--- ============================================
-CREATE TABLE IF NOT EXISTS roles (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(100) NOT NULL UNIQUE,
-    capabilities TEXT[] NOT NULL DEFAULT '{}',
-    is_system BOOLEAN DEFAULT false,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
+-- Org-level indexes are created inside the migration DO block below
+-- after org_id columns are added
 
 -- ============================================
 -- Migration: add columns if they don't exist (for existing databases)
 -- ============================================
 DO $$
 BEGIN
+    -- users: password_hash
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'password_hash') THEN
+        ALTER TABLE users ADD COLUMN password_hash VARCHAR(255);
+    END IF;
+    -- users: role
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'role') THEN
+        ALTER TABLE users ADD COLUMN role VARCHAR(100) DEFAULT 'inventory';
+    END IF;
+    -- users: phone
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'phone') THEN
+        ALTER TABLE users ADD COLUMN phone VARCHAR(50);
+    END IF;
+    -- users: is_active
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'is_active') THEN
+        ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT true;
+    END IF;
+    -- users: is_super_admin
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'is_super_admin') THEN
+        ALTER TABLE users ADD COLUMN is_super_admin BOOLEAN NOT NULL DEFAULT false;
+    END IF;
+    -- users: org_id
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'org_id') THEN
+        ALTER TABLE users ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+        -- Remove old global email unique constraint
+        IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_name = 'users' AND constraint_name = 'users_email_key') THEN
+            ALTER TABLE users DROP CONSTRAINT users_email_key;
+        END IF;
+    END IF;
+
+    -- roles: org_id
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'roles' AND column_name = 'org_id') THEN
+        ALTER TABLE roles ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+        IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_name = 'roles' AND constraint_name = 'roles_name_key') THEN
+            ALTER TABLE roles DROP CONSTRAINT roles_name_key;
+        END IF;
+    END IF;
+
+    -- units: org_id
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'units' AND column_name = 'org_id') THEN
+        ALTER TABLE units ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+        IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_name = 'units' AND constraint_name = 'units_name_key') THEN
+            ALTER TABLE units DROP CONSTRAINT units_name_key;
+        END IF;
+    END IF;
+
+    -- products: org_id
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'org_id') THEN
+        ALTER TABLE products ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+        IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_name = 'products' AND constraint_name = 'products_product_code_key') THEN
+            ALTER TABLE products DROP CONSTRAINT products_product_code_key;
+        END IF;
+    END IF;
+
+    -- customers: org_id
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'customers' AND column_name = 'org_id') THEN
+        ALTER TABLE customers ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+    END IF;
+
+    -- inventory_batches: org_id
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'inventory_batches' AND column_name = 'org_id') THEN
+        ALTER TABLE inventory_batches ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+    END IF;
+
+    -- orders: org_id
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'org_id') THEN
+        ALTER TABLE orders ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+        IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_name = 'orders' AND constraint_name = 'orders_invoice_number_key') THEN
+            ALTER TABLE orders DROP CONSTRAINT orders_invoice_number_key;
+        END IF;
+    END IF;
+
+    -- order_items: org_id
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'order_items' AND column_name = 'org_id') THEN
+        ALTER TABLE order_items ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+    END IF;
+
+    -- stock_movements: org_id
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'stock_movements' AND column_name = 'org_id') THEN
+        ALTER TABLE stock_movements ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+    END IF;
+
+    -- Create org-level indexes (safe to run after columns exist)
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_users_org') THEN
+        CREATE INDEX idx_users_org ON users(org_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_roles_org') THEN
+        CREATE INDEX idx_roles_org ON roles(org_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_units_org') THEN
+        CREATE INDEX idx_units_org ON units(org_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_products_org') THEN
+        CREATE INDEX idx_products_org ON products(org_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_customers_org') THEN
+        CREATE INDEX idx_customers_org ON customers(org_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_batches_org') THEN
+        CREATE INDEX idx_batches_org ON inventory_batches(org_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_orders_org') THEN
+        CREATE INDEX idx_orders_org ON orders(org_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_order_items_org') THEN
+        CREATE INDEX idx_order_items_org ON order_items(org_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_movements_org') THEN
+        CREATE INDEX idx_movements_org ON stock_movements(org_id);
+    END IF;
+
     -- products: unit_price
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'unit_price') THEN
         ALTER TABLE products ADD COLUMN unit_price DECIMAL(10,2) DEFAULT 0;
@@ -203,71 +347,89 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'party_name') THEN
         ALTER TABLE orders ADD COLUMN party_name TEXT;
     END IF;
-END $$;
-
--- ============================================
--- Migration: create roles table and insert defaults
--- ============================================
-DO $$
-BEGIN
-    -- Create roles table if not exists (handled above, but safe for standalone migration)
-    CREATE TABLE IF NOT EXISTS roles (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        name VARCHAR(100) NOT NULL UNIQUE,
-        capabilities TEXT[] NOT NULL DEFAULT '{}',
-        is_system BOOLEAN DEFAULT false,
-        created_at TIMESTAMP NOT NULL DEFAULT NOW()
-    );
-
-    -- Insert default admin role if not exists
-    IF NOT EXISTS (SELECT 1 FROM roles WHERE name = 'admin') THEN
-        INSERT INTO roles (name, capabilities, is_system)
-        VALUES ('admin', ARRAY['dashboard','products','categories','customers','material_in','movements','material_out','reports','user_management','role_management'], true);
+    -- units: has_sub_unit
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'units' AND column_name = 'has_sub_unit') THEN
+        ALTER TABLE units ADD COLUMN has_sub_unit BOOLEAN DEFAULT false;
     END IF;
-
-    -- Insert default inventory role if not exists
-    IF NOT EXISTS (SELECT 1 FROM roles WHERE name = 'inventory') THEN
-        INSERT INTO roles (name, capabilities, is_system)
-        VALUES ('inventory', ARRAY['dashboard','products','categories','material_in','movements','material_out','reports'], true);
+    -- units: sub_unit_name
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'units' AND column_name = 'sub_unit_name') THEN
+        ALTER TABLE units ADD COLUMN sub_unit_name VARCHAR(100);
     END IF;
 END $$;
 
 -- ============================================
--- Migration: create units table and seed defaults
+-- Migration: create default org for existing data
+-- Uses dynamic SQL to avoid parse-time column validation errors
 -- ============================================
 DO $$
+DECLARE
+    default_org_id UUID;
+    has_unassigned BOOLEAN := false;
 BEGIN
-    -- Create units table if not exists (handled above, but safe for standalone migration)
-    CREATE TABLE IF NOT EXISTS units (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        name VARCHAR(100) NOT NULL UNIQUE,
-        has_sub_unit BOOLEAN DEFAULT false,
-        sub_unit_name VARCHAR(100),
-        created_at TIMESTAMP NOT NULL DEFAULT NOW()
-    );
-
-    -- Seed default units if they don't exist
-    IF NOT EXISTS (SELECT 1 FROM units WHERE name = 'Pieces') THEN
-        INSERT INTO units (name, has_sub_unit) VALUES ('Pieces', false);
+    -- Check using dynamic SQL to avoid parse-time errors on org_id column
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'org_id') THEN
+        EXECUTE 'SELECT EXISTS (SELECT 1 FROM products WHERE org_id IS NULL LIMIT 1)' INTO has_unassigned;
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM units WHERE name = 'Kg') THEN
-        INSERT INTO units (name, has_sub_unit) VALUES ('Kg', false);
+    IF NOT has_unassigned THEN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'customers' AND column_name = 'org_id') THEN
+            EXECUTE 'SELECT EXISTS (SELECT 1 FROM customers WHERE org_id IS NULL LIMIT 1)' INTO has_unassigned;
+        END IF;
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM units WHERE name = 'Liters') THEN
-        INSERT INTO units (name, has_sub_unit) VALUES ('Liters', false);
+    IF NOT has_unassigned THEN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'org_id') THEN
+            EXECUTE 'SELECT EXISTS (SELECT 1 FROM users WHERE org_id IS NULL AND is_super_admin = false LIMIT 1)' INTO has_unassigned;
+        END IF;
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM units WHERE name = 'Meters') THEN
-        INSERT INTO units (name, has_sub_unit) VALUES ('Meters', false);
-    END IF;
+    IF has_unassigned THEN
+        -- Create default org if not already exists
+        IF NOT EXISTS (SELECT 1 FROM organizations WHERE org_code = 'GREE-001') THEN
+            INSERT INTO organizations (org_code, org_name, org_email, org_phone, address)
+            VALUES ('GREE-001', 'GREE Marketing India LLP', 'admin@greebond.com', '', 'Chennai - 600 001')
+            RETURNING id INTO default_org_id;
+        ELSE
+            SELECT id INTO default_org_id FROM organizations WHERE org_code = 'GREE-001';
+        END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM units WHERE name = 'Boxes') THEN
-        INSERT INTO units (name, has_sub_unit, sub_unit_name) VALUES ('Boxes', true, 'Pieces');
-    END IF;
+        -- Migrate all existing data to default org using dynamic SQL
+        EXECUTE 'UPDATE users SET org_id = $1 WHERE org_id IS NULL AND is_super_admin = false' USING default_org_id;
+        EXECUTE 'UPDATE products SET org_id = $1 WHERE org_id IS NULL' USING default_org_id;
+        EXECUTE 'UPDATE customers SET org_id = $1 WHERE org_id IS NULL' USING default_org_id;
+        EXECUTE 'UPDATE inventory_batches SET org_id = $1 WHERE org_id IS NULL' USING default_org_id;
+        EXECUTE 'UPDATE orders SET org_id = $1 WHERE org_id IS NULL' USING default_org_id;
+        EXECUTE 'UPDATE order_items SET org_id = $1 WHERE org_id IS NULL' USING default_org_id;
+        EXECUTE 'UPDATE stock_movements SET org_id = $1 WHERE org_id IS NULL' USING default_org_id;
+        EXECUTE 'UPDATE roles SET org_id = $1 WHERE org_id IS NULL' USING default_org_id;
+        EXECUTE 'UPDATE units SET org_id = $1 WHERE org_id IS NULL' USING default_org_id;
 
-    IF NOT EXISTS (SELECT 1 FROM units WHERE name = 'Rolls') THEN
-        INSERT INTO units (name, has_sub_unit) VALUES ('Rolls', false);
+        -- Ensure default roles exist for the org
+        IF NOT EXISTS (SELECT 1 FROM roles WHERE org_id = default_org_id AND name = 'admin') THEN
+            INSERT INTO roles (name, capabilities, is_system, org_id)
+            VALUES ('admin', ARRAY['dashboard','products','categories','customers','material_in','movements','material_out','reports','user_management','role_management','unit_management'], true, default_org_id);
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM roles WHERE org_id = default_org_id AND name = 'inventory') THEN
+            INSERT INTO roles (name, capabilities, is_system, org_id)
+            VALUES ('inventory', ARRAY['dashboard','products','categories','material_in','movements','material_out','reports'], true, default_org_id);
+        END IF;
+
+        -- Seed default units for default org if not present
+        IF NOT EXISTS (SELECT 1 FROM units WHERE org_id = default_org_id AND name = 'Box') THEN
+            INSERT INTO units (name, org_id) VALUES ('Box', default_org_id);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM units WHERE org_id = default_org_id AND name = 'PCS') THEN
+            INSERT INTO units (name, org_id) VALUES ('PCS', default_org_id);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM units WHERE org_id = default_org_id AND name = 'KG') THEN
+            INSERT INTO units (name, org_id) VALUES ('KG', default_org_id);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM units WHERE org_id = default_org_id AND name = 'MTR') THEN
+            INSERT INTO units (name, org_id) VALUES ('MTR', default_org_id);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM units WHERE org_id = default_org_id AND name = 'LTR') THEN
+            INSERT INTO units (name, org_id) VALUES ('LTR', default_org_id);
+        END IF;
     END IF;
 END $$;

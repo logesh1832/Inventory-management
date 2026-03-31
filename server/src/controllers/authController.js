@@ -13,7 +13,7 @@ const login = async (req, res, next) => {
     }
 
     const result = await pool.query(
-      'SELECT id, name, email, password_hash, role, phone, is_active FROM users WHERE email = $1',
+      'SELECT id, name, email, password_hash, role, phone, is_active, is_super_admin, org_id FROM users WHERE email = $1',
       [email.toLowerCase().trim()]
     );
 
@@ -27,8 +27,8 @@ const login = async (req, res, next) => {
       return res.status(403).json({ error: { message: 'Account is deactivated. Contact admin.' } });
     }
 
-    // Block salesperson login
-    if (user.role === 'salesperson') {
+    // Block salesperson login (non-super-admin users with salesperson role)
+    if (!user.is_super_admin && user.role === 'salesperson') {
       return res.status(403).json({ error: { message: 'Salesperson accounts are not permitted to login. Contact admin.' } });
     }
 
@@ -37,18 +37,45 @@ const login = async (req, res, next) => {
       return res.status(401).json({ error: { message: 'Invalid email or password.' } });
     }
 
-    // Fetch role capabilities
-    const roleResult = await pool.query(
-      'SELECT capabilities FROM roles WHERE name = $1',
-      [user.role]
-    );
-    const capabilities = roleResult.rows.length > 0 ? roleResult.rows[0].capabilities : [];
+    let org = null;
+    let capabilities = [];
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, name: user.name },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
+    if (user.is_super_admin) {
+      // Super admin — no org, full capabilities
+      capabilities = ['super_admin'];
+    } else {
+      // Check org is active
+      if (user.org_id) {
+        const orgResult = await pool.query(
+          'SELECT id, org_code, org_name, is_active FROM organizations WHERE id = $1',
+          [user.org_id]
+        );
+        if (orgResult.rows.length === 0 || !orgResult.rows[0].is_active) {
+          return res.status(403).json({ error: { message: 'Your organization is inactive. Contact support.' } });
+        }
+        org = orgResult.rows[0];
+      }
+
+      // Fetch role capabilities scoped to org
+      const roleResult = await pool.query(
+        'SELECT capabilities FROM roles WHERE name = $1 AND org_id = $2',
+        [user.role, user.org_id]
+      );
+      capabilities = roleResult.rows.length > 0 ? roleResult.rows[0].capabilities : [];
+    }
+
+    const tokenPayload = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name,
+      is_super_admin: user.is_super_admin,
+      org_id: user.org_id || null,
+      org_code: org?.org_code || null,
+      org_name: org?.org_name || null,
+    };
+
+    const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '24h' });
 
     res.json({
       token,
@@ -58,6 +85,10 @@ const login = async (req, res, next) => {
         email: user.email,
         role: user.role,
         phone: user.phone,
+        is_super_admin: user.is_super_admin,
+        org_id: user.org_id || null,
+        org_code: org?.org_code || null,
+        org_name: org?.org_name || null,
         capabilities,
       },
     });
@@ -79,7 +110,7 @@ const logout = async (req, res, next) => {
 const getMe = async (req, res, next) => {
   try {
     const result = await pool.query(
-      'SELECT id, name, email, role, phone, is_active, created_at FROM users WHERE id = $1',
+      'SELECT id, name, email, role, phone, is_active, is_super_admin, org_id, created_at FROM users WHERE id = $1',
       [req.user.id]
     );
 
@@ -88,15 +119,33 @@ const getMe = async (req, res, next) => {
     }
 
     const user = result.rows[0];
+    let org = null;
+    let capabilities = [];
 
-    // Fetch role capabilities
-    const roleResult = await pool.query(
-      'SELECT capabilities FROM roles WHERE name = $1',
-      [user.role]
-    );
-    user.capabilities = roleResult.rows.length > 0 ? roleResult.rows[0].capabilities : [];
+    if (user.is_super_admin) {
+      capabilities = ['super_admin'];
+    } else {
+      if (user.org_id) {
+        const orgResult = await pool.query(
+          'SELECT id, org_code, org_name FROM organizations WHERE id = $1',
+          [user.org_id]
+        );
+        if (orgResult.rows.length > 0) org = orgResult.rows[0];
+      }
 
-    res.json(user);
+      const roleResult = await pool.query(
+        'SELECT capabilities FROM roles WHERE name = $1 AND org_id = $2',
+        [user.role, user.org_id]
+      );
+      capabilities = roleResult.rows.length > 0 ? roleResult.rows[0].capabilities : [];
+    }
+
+    res.json({
+      ...user,
+      org_code: org?.org_code || null,
+      org_name: org?.org_name || null,
+      capabilities,
+    });
   } catch (err) {
     next(err);
   }

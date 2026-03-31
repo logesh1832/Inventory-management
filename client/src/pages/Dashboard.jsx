@@ -18,8 +18,82 @@ const statusBadge = (status) => {
   return map[status] || 'bg-gray-100 text-gray-700';
 };
 
-const formatINR = (val) =>
-  parseFloat(val || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+function SuperAdminDashboard() {
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get('/dashboard/platform')
+      .then(({ data }) => setData(data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <p className="text-gray-500">Loading...</p>;
+  if (!data) return <p className="text-red-500">Failed to load platform dashboard.</p>;
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-800">Platform Dashboard</h2>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {[
+          { label: 'Total Organizations', value: data.total_orgs, color: 'bg-blue-500', link: '/orgs' },
+          { label: 'Active Organizations', value: data.active_orgs, color: 'bg-green-500', link: '/orgs' },
+          { label: 'Total Users', value: data.total_users, color: 'bg-indigo-500', link: '/orgs' },
+        ].map((card) => (
+          <div
+            key={card.label}
+            onClick={() => navigate(card.link)}
+            className="bg-white rounded-lg shadow p-4 cursor-pointer hover:shadow-md transition-shadow"
+          >
+            <p className="text-xs text-gray-500 mb-1 text-center">{card.label}</p>
+            <p className="font-bold text-gray-800 text-center text-3xl">{card.value}</p>
+            <div className={`w-full h-1 rounded mt-2 ${card.color} opacity-30`} />
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-lg shadow">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-800">Recent Organizations</h3>
+          <Link to="/orgs" className="text-sm text-yellow-600 hover:underline">View All</Link>
+        </div>
+        {!data.recent_orgs || data.recent_orgs.length === 0 ? (
+          <p className="px-5 py-4 text-gray-400 text-sm">No organizations yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Organization</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Users</th>
+                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {data.recent_orgs.map((org) => (
+                  <tr key={org.id} className="hover:bg-gray-50">
+                    <td className="px-5 py-3 text-sm font-medium text-gray-800">{org.org_name}</td>
+                    <td className="px-5 py-3 text-sm text-gray-500">{org.org_code}</td>
+                    <td className="px-5 py-3 text-sm text-gray-500">{org.user_count}</td>
+                    <td className="px-5 py-3">
+                      <span className={`text-xs px-2 py-1 rounded font-medium ${org.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {org.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -29,11 +103,14 @@ export default function Dashboard() {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
+    if (user?.is_super_admin) { setLoading(false); return; }
     api.get('/dashboard/inventory')
       .then(({ data }) => setData(data))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [user?.is_super_admin]);
+
+  if (user?.is_super_admin) return <SuperAdminDashboard />;
 
   if (loading) return <p className="text-gray-500">Loading...</p>;
   if (!data) return <p className="text-red-500">Failed to load dashboard.</p>;
