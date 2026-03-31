@@ -3,7 +3,7 @@ const pool = require('../config/db');
 // POST /api/products
 const createProduct = async (req, res, next) => {
   try {
-    const { product_name, product_code, unit, category, batch_tracking, qty_per_box, low_stock_threshold } = req.body;
+    const { product_name, product_code, unit, sub_unit, category, batch_tracking, qty_per_box, low_stock_threshold } = req.body;
     const image_url = req.file ? `/uploads/products/${req.file.filename}` : null;
 
     if (!product_name || !unit) {
@@ -13,10 +13,10 @@ const createProduct = async (req, res, next) => {
     const code = product_code?.trim() || product_name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/-+$/, '');
 
     const result = await pool.query(
-      `INSERT INTO products (product_name, product_code, unit, category, batch_tracking, qty_per_box, image_url, low_stock_threshold)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO products (product_name, product_code, unit, sub_unit, category, batch_tracking, qty_per_box, image_url, low_stock_threshold)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [product_name.trim(), code, unit.trim(), category?.trim() || null, batch_tracking || false, unit === 'Boxes' && qty_per_box ? Number(qty_per_box) : null, image_url, low_stock_threshold != null ? Number(low_stock_threshold) : 50]
+      [product_name.trim(), code, unit.trim(), sub_unit?.trim() || null, category?.trim() || null, batch_tracking || false, sub_unit && qty_per_box ? Number(qty_per_box) : null, image_url, low_stock_threshold != null ? Number(low_stock_threshold) : 50]
     );
 
     res.status(201).json(result.rows[0]);
@@ -107,22 +107,23 @@ const getProductById = async (req, res, next) => {
 const updateProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { product_name, unit, status, category, batch_tracking, qty_per_box, low_stock_threshold } = req.body;
+    const { product_name, unit, sub_unit, status, category, batch_tracking, qty_per_box, low_stock_threshold } = req.body;
     const image_url = req.file ? `/uploads/products/${req.file.filename}` : null;
 
     const result = await pool.query(
       `UPDATE products
        SET product_name = COALESCE($1, product_name),
            unit = COALESCE($2, unit),
-           status = COALESCE($3, status),
-           category = COALESCE($4, category),
-           batch_tracking = $5,
-           qty_per_box = $6,
-           image_url = COALESCE($7, image_url),
-           low_stock_threshold = COALESCE($8, low_stock_threshold)
-       WHERE id = $9
+           sub_unit = $3,
+           status = COALESCE($4, status),
+           category = COALESCE($5, category),
+           batch_tracking = $6,
+           qty_per_box = $7,
+           image_url = COALESCE($8, image_url),
+           low_stock_threshold = COALESCE($9, low_stock_threshold)
+       WHERE id = $10
        RETURNING *`,
-      [product_name, unit, status, category, batch_tracking !== undefined ? batch_tracking : false, unit === 'Boxes' && qty_per_box ? Number(qty_per_box) : null, image_url, low_stock_threshold != null ? Number(low_stock_threshold) : null, id]
+      [product_name, unit, sub_unit?.trim() || null, status, category, batch_tracking !== undefined ? batch_tracking : false, sub_unit && qty_per_box ? Number(qty_per_box) : null, image_url, low_stock_threshold != null ? Number(low_stock_threshold) : null, id]
     );
 
     if (result.rows.length === 0) {

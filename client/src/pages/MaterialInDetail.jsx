@@ -55,11 +55,12 @@ export default function MaterialInDetail() {
 
   const formatQty = (e) => {
     const qty = e.quantity;
-    const unit = e.unit || 'pcs';
+    const unit = e.unit || '';
+    const subUnit = e.sub_unit;
     const qtyPerBox = e.qty_per_box;
-    if (unit === 'Boxes' && qtyPerBox) {
+    if (subUnit && qtyPerBox) {
       const boxes = qty / qtyPerBox;
-      return <span>{boxes} Box ({qty} PCS)</span>;
+      return <span>{boxes} {unit} ({qty} {subUnit})</span>;
     }
     return <span>{qty} {unit}</span>;
   };

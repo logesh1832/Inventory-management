@@ -14,6 +14,7 @@ export default function ProductForm() {
     product_name: '',
     product_code: '',
     unit: '',
+    sub_unit: '',
     status: 'active',
     category: '',
     batch_tracking: false,
@@ -30,8 +31,8 @@ export default function ProductForm() {
   const [loading, setLoading] = useState(isEdit);
 
   useEffect(() => {
-    api.get('/categories?active=true')
-      .then(({ data }) => setCategoryOptions(data.map((c) => c.category_name)))
+    api.get('/products/categories')
+      .then(({ data }) => setCategoryOptions(data))
       .catch(() => {});
     api.get('/units')
       .then(({ data }) => setUnitOptions(data))
@@ -46,6 +47,7 @@ export default function ProductForm() {
             product_name: data.product_name,
             product_code: data.product_code,
             unit: data.unit,
+            sub_unit: data.sub_unit || '',
             status: data.status,
             category: data.category || '',
             batch_tracking: data.batch_tracking || false,
@@ -68,9 +70,8 @@ export default function ProductForm() {
     const newErrors = {};
     if (!form.product_name.trim()) newErrors.product_name = 'Product name is required';
     if (!form.unit) newErrors.unit = 'Unit is required';
-    const selectedUnit = unitOptions.find((u) => u.name === form.unit);
-    if (selectedUnit?.has_sub_unit && (!form.qty_per_box || Number(form.qty_per_box) <= 0)) {
-      newErrors.qty_per_box = `Quantity per ${selectedUnit.sub_unit_name || 'unit'} is required`;
+    if (form.sub_unit && (!form.qty_per_box || Number(form.qty_per_box) <= 0)) {
+      newErrors.qty_per_box = `Qty per ${form.sub_unit} is required when sub unit is set`;
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -107,9 +108,10 @@ export default function ProductForm() {
       formData.append('product_name', form.product_name);
       formData.append('product_code', form.product_code);
       formData.append('unit', form.unit);
+      formData.append('sub_unit', form.sub_unit || '');
       formData.append('category', form.category);
       formData.append('batch_tracking', form.batch_tracking);
-      formData.append('qty_per_box', form.qty_per_box || '');
+      formData.append('qty_per_box', form.sub_unit ? form.qty_per_box || '' : '');
       formData.append('low_stock_threshold', form.low_stock_threshold || '50');
       if (imageFile) formData.append('image', imageFile);
 
@@ -232,7 +234,11 @@ export default function ProductForm() {
           <select
             name="unit"
             value={form.unit}
-            onChange={handleChange}
+            onChange={(e) => {
+              handleChange(e);
+              // clear sub_unit if same as new unit
+              if (e.target.value === form.sub_unit) setForm((p) => ({ ...p, sub_unit: '', qty_per_box: '' }));
+            }}
             className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 ${errors.unit ? 'border-red-500' : 'border-gray-300'}`}
           >
             <option value="">Select Unit</option>
@@ -240,32 +246,47 @@ export default function ProductForm() {
               <option key={u.id} value={u.name}>{u.name}</option>
             ))}
           </select>
+          {errors.unit && <p className="text-red-500 text-xs mt-1">{errors.unit}</p>}
         </div>
 
-        {/* Qty per Sub Unit (only when selected unit has sub unit) */}
-        {(() => {
-          const selectedUnit = unitOptions.find((u) => u.name === form.unit);
-          if (!selectedUnit?.has_sub_unit) return null;
-          const subLabel = selectedUnit.sub_unit_name || 'Unit';
-          return (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Qty per {subLabel} <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                name="qty_per_box"
-                value={form.qty_per_box}
-                onChange={handleChange}
-                min="1"
-                placeholder="e.g. 12"
-                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 ${errors.qty_per_box ? 'border-red-500' : 'border-gray-300'}`}
-              />
-              <p className="text-gray-400 text-xs mt-1">How many {subLabel.toLowerCase()} in each {selectedUnit.name.toLowerCase()}</p>
-              {errors.qty_per_box && <p className="text-red-500 text-xs mt-1">{errors.qty_per_box}</p>}
-            </div>
-          );
-        })()}
+        {/* Sub Unit (optional) */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Sub Unit <span className="text-gray-400 text-xs font-normal">(optional)</span></label>
+          <select
+            name="sub_unit"
+            value={form.sub_unit}
+            onChange={(e) => {
+              handleChange(e);
+              if (!e.target.value) setForm((p) => ({ ...p, sub_unit: '', qty_per_box: '' }));
+            }}
+            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500"
+          >
+            <option value="">None</option>
+            {unitOptions.filter((u) => u.name !== form.unit).map((u) => (
+              <option key={u.id} value={u.name}>{u.name}</option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-400 mt-1">Set if this unit contains a smaller unit (e.g. Box → Piece)</p>
+        </div>
+
+        {/* Qty per unit (only when sub unit is selected) */}
+        {form.sub_unit && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              How many <strong>{form.sub_unit}</strong> in 1 <strong>{form.unit || 'unit'}</strong>? <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              name="qty_per_box"
+              value={form.qty_per_box}
+              onChange={handleChange}
+              min="1"
+              placeholder="e.g. 120"
+              className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 ${errors.qty_per_box ? 'border-red-500' : 'border-gray-300'}`}
+            />
+            {errors.qty_per_box && <p className="text-red-500 text-xs mt-1">{errors.qty_per_box}</p>}
+          </div>
+        )}
 
         {/* Low Stock Threshold */}
         <div className="mb-4">

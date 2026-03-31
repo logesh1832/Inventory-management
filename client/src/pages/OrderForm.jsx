@@ -112,7 +112,7 @@ export default function OrderForm() {
         const prod = productsList.find((p) => p.id === item.product_id);
         let displayQty = String(item.quantity);
         let qtyUnit = 'default';
-        if (prod && prod.unit === 'Boxes' && prod.qty_per_box) {
+        if (prod && prod.sub_unit && prod.qty_per_box) {
           if (item.quantity % prod.qty_per_box === 0) {
             displayQty = String(item.quantity / prod.qty_per_box);
             qtyUnit = 'boxes';
@@ -176,7 +176,7 @@ export default function OrderForm() {
       prev.map((item) => {
         if (item.id !== itemId) return item;
         const prod = products.find((p) => p.id === productId);
-        const qtyUnit = prod && prod.unit === 'Boxes' && prod.qty_per_box ? 'boxes' : 'default';
+        const qtyUnit = prod && prod.sub_unit && prod.qty_per_box ? 'boxes' : 'default';
         return { ...item, product_id: productId, qty_unit: qtyUnit, batches: [], allocations: [], useManualBatch: false };
       })
     );
@@ -393,7 +393,7 @@ export default function OrderForm() {
       if (item.useManualBatch && item.allocations.length > 0) {
         const prod = products.find((p) => p.id === item.product_id);
         const rawQty = Number(item.quantity) || 0;
-        const totalQty = (prod && prod.unit === 'Boxes' && prod.qty_per_box && (item.qty_unit === 'boxes' || item.qty_unit === 'default'))
+        const totalQty = (prod && prod.sub_unit && prod.qty_per_box && (item.qty_unit === 'boxes' || item.qty_unit === 'default'))
           ? rawQty * prod.qty_per_box
           : rawQty;
         const allocTotal = getAllocatedTotal(item);
@@ -435,7 +435,7 @@ export default function OrderForm() {
         const prod = products.find((p) => p.id === item.product_id);
         const getActualQty = (qty) => {
           const n = Number(qty);
-          if (prod && prod.unit === 'Boxes' && prod.qty_per_box && (item.qty_unit === 'boxes' || item.qty_unit === 'default')) {
+          if (prod && prod.sub_unit && prod.qty_per_box && (item.qty_unit === 'boxes' || item.qty_unit === 'default')) {
             return n * prod.qty_per_box;
           }
           return n;
@@ -626,15 +626,15 @@ export default function OrderForm() {
                         />
                         {(() => {
                           const prod = products.find((p) => p.id === item.product_id);
-                          if (prod && prod.unit === 'Boxes' && prod.qty_per_box) {
+                          if (prod && prod.sub_unit && prod.qty_per_box) {
                             return (
                               <select
                                 value={item.qty_unit}
                                 onChange={(e) => updateItem(item.id, 'qty_unit', e.target.value)}
                                 className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500 bg-white"
                               >
-                                <option value="boxes">Boxes</option>
-                                <option value="pieces">Pieces</option>
+                                <option value="boxes">{prod.unit}</option>
+                                <option value="pieces">{prod.sub_unit}</option>
                               </select>
                             );
                           }
@@ -643,13 +643,13 @@ export default function OrderForm() {
                       </div>
                       {(() => {
                         const prod = products.find((p) => p.id === item.product_id);
-                        if (prod && prod.unit === 'Boxes' && prod.qty_per_box && item.quantity) {
+                        if (prod && prod.sub_unit && prod.qty_per_box && item.quantity) {
                           const qty = Number(item.quantity);
                           const ppb = prod.qty_per_box;
                           if (item.qty_unit === 'boxes' || item.qty_unit === 'default') {
                             return (
                               <p className="text-xs text-blue-600 font-medium mt-1">
-                                {qty} Box x {ppb} = {qty * ppb} pcs
+                                {qty} {prod.unit} x {ppb} = {qty * ppb} {prod.sub_unit}
                               </p>
                             );
                           } else {
@@ -657,7 +657,7 @@ export default function OrderForm() {
                             const remaining = qty % ppb;
                             return (
                               <p className="text-xs text-blue-600 font-medium mt-1">
-                                {boxes > 0 ? `${boxes} Box` : ''}{boxes > 0 && remaining > 0 ? ' + ' : ''}{remaining > 0 ? `${remaining} pcs` : ''}{boxes === 0 && remaining === 0 ? '0 pcs' : ''}
+                                {boxes > 0 ? `${boxes} ${prod.unit}` : ''}{boxes > 0 && remaining > 0 ? ' + ' : ''}{remaining > 0 ? `${remaining} ${prod.sub_unit}` : ''}{boxes === 0 && remaining === 0 ? `0 ${prod.sub_unit}` : ''}
                               </p>
                             );
                           }
@@ -676,7 +676,7 @@ export default function OrderForm() {
                           {item.quantity && (() => {
                             const prod = products.find((p) => p.id === item.product_id);
                             const rawQty = Number(item.quantity) || 0;
-                            const totalPcs = (prod && prod.unit === 'Boxes' && prod.qty_per_box && (item.qty_unit === 'boxes' || item.qty_unit === 'default'))
+                            const totalPcs = (prod && prod.sub_unit && prod.qty_per_box && (item.qty_unit === 'boxes' || item.qty_unit === 'default'))
                               ? rawQty * prod.qty_per_box : rawQty;
                             const allocTotal = getAllocatedTotal(item);
                             return (

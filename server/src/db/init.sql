@@ -17,8 +17,6 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS units (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(100) NOT NULL UNIQUE,
-    has_sub_unit BOOLEAN DEFAULT false,
-    sub_unit_name VARCHAR(100),
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -30,6 +28,7 @@ CREATE TABLE IF NOT EXISTS products (
     product_name VARCHAR(255) NOT NULL,
     product_code VARCHAR(100) NOT NULL UNIQUE,
     unit VARCHAR(50) NOT NULL DEFAULT 'pcs',
+    sub_unit VARCHAR(50) DEFAULT NULL,
     qty_per_box INTEGER DEFAULT NULL,
     image_url TEXT,
     low_stock_threshold INTEGER DEFAULT 50,

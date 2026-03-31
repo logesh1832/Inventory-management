@@ -432,15 +432,15 @@ export default function BatchForm() {
                       />
                       {(() => {
                         const prod = products.find((p) => p.id === row.product_id);
-                        if (prod && prod.unit === 'Boxes' && prod.qty_per_box) {
+                        if (prod && prod.sub_unit && prod.qty_per_box) {
                           return (
                             <select
                               value={row.qty_unit || 'boxes'}
                               onChange={(e) => updateRow(row.id, 'qty_unit', e.target.value)}
                               className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500 bg-white"
                             >
-                              <option value="boxes">Boxes</option>
-                              <option value="pieces">Pieces</option>
+                              <option value="boxes">{prod.unit}</option>
+                              <option value="pieces">{prod.sub_unit}</option>
                             </select>
                           );
                         }
@@ -449,13 +449,13 @@ export default function BatchForm() {
                     </div>
                     {(() => {
                       const prod = products.find((p) => p.id === row.product_id);
-                      if (prod && prod.unit === 'Boxes' && prod.qty_per_box && row.quantity) {
+                      if (prod && prod.sub_unit && prod.qty_per_box && row.quantity) {
                         const qty = Number(row.quantity);
                         const ppb = prod.qty_per_box;
                         if ((row.qty_unit || 'boxes') === 'boxes') {
                           return (
                             <p className="text-xs text-blue-600 font-medium mt-1">
-                              {qty} Box x {ppb} = {qty * ppb} pcs
+                              {qty} {prod.unit} x {ppb} = {qty * ppb} {prod.sub_unit}
                             </p>
                           );
                         } else {
@@ -463,7 +463,7 @@ export default function BatchForm() {
                           const remaining = qty % ppb;
                           return (
                             <p className="text-xs text-blue-600 font-medium mt-1">
-                              {boxes > 0 ? `${boxes} Box` : ''}{boxes > 0 && remaining > 0 ? ' + ' : ''}{remaining > 0 ? `${remaining} pcs` : ''}{boxes === 0 && remaining === 0 ? '0 pcs' : ''}
+                              {boxes > 0 ? `${boxes} ${prod.unit}` : ''}{boxes > 0 && remaining > 0 ? ' + ' : ''}{remaining > 0 ? `${remaining} ${prod.sub_unit}` : ''}{boxes === 0 && remaining === 0 ? `0 ${prod.sub_unit}` : ''}
                             </p>
                           );
                         }

@@ -48,12 +48,13 @@ export default function OrderDetail() {
 
   const formatQty = (item) => {
     const qty = item.quantity;
-    const unit = item.unit || 'pcs';
+    const unit = item.unit || '';
+    const subUnit = item.sub_unit;
     const qtyPerBox = item.qty_per_box;
 
-    if (unit === 'Boxes' && qtyPerBox) {
+    if (subUnit && qtyPerBox) {
       const boxes = qty / qtyPerBox;
-      return <span>{boxes} Box ({qty} PCS)</span>;
+      return <span>{boxes} {unit} ({qty} {subUnit})</span>;
     }
     return <span>{qty} {unit}</span>;
   };

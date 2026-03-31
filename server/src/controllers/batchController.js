@@ -570,7 +570,7 @@ const getStockEntriesByGroup = async (req, res, next) => {
               sm.reference_number, sm.party_name,
               COALESCE(sm.received_date, sm.created_at::date)::date AS received_date,
               sm.product_id, sm.batch_id,
-              p.product_name, p.product_code, p.batch_tracking, p.unit, p.qty_per_box, p.image_url,
+              p.product_name, p.product_code, p.batch_tracking, p.unit, p.sub_unit, p.qty_per_box, p.image_url,
               ib.batch_number, ib.manufacture_date, ib.expiry_date,
               c.customer_name AS supplier_name
        FROM stock_movements sm
