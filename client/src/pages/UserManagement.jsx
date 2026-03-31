@@ -80,7 +80,9 @@ export default function UserManagement() {
     }
   };
 
+  const roleNames = roles.map((r) => r.name);
   const filtered = users.filter((u) => {
+    if (roleNames.length > 0 && !roleNames.includes(u.role)) return false;
     const matchesSearch = !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
     const matchesRole = !roleFilter || u.role === roleFilter;
     return matchesSearch && matchesRole;
