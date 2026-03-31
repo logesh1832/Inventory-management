@@ -450,20 +450,19 @@ const getStockEntrySiblings = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // First get the clicked entry to find supplier_id + received_date
+    // First get the clicked entry to find its voucher_number
     const ref = await pool.query(
-      `SELECT sm.supplier_id, COALESCE(sm.received_date, ib.received_date, sm.created_at::date) AS received_date
+      `SELECT sm.voucher_number
        FROM stock_movements sm
-       LEFT JOIN inventory_batches ib ON ib.id = sm.batch_id
        WHERE sm.id = $1 AND sm.movement_type = 'IN'`,
       [id]
     );
     if (ref.rows.length === 0) {
       return res.status(404).json({ error: 'Stock entry not found' });
     }
-    const { supplier_id, received_date } = ref.rows[0];
+    const { voucher_number } = ref.rows[0];
 
-    // Fetch all siblings
+    // Fetch all siblings with same voucher_number
     const result = await pool.query(
       `SELECT sm.id, sm.quantity, sm.supplier_id, sm.voucher_number,
               sm.reference_number, sm.party_name,
@@ -477,10 +476,9 @@ const getStockEntrySiblings = async (req, res, next) => {
        LEFT JOIN inventory_batches ib ON ib.id = sm.batch_id
        LEFT JOIN customers c ON c.id = sm.supplier_id
        WHERE sm.movement_type = 'IN'
-         AND sm.supplier_id = $1
-         AND COALESCE(sm.received_date, sm.created_at::date)::date = $2::date
+         AND sm.voucher_number = $1
        ORDER BY sm.created_at ASC`,
-      [supplier_id, received_date]
+      [voucher_number]
     );
     res.json(result.rows);
   } catch (err) {
@@ -525,7 +523,7 @@ const getStockEntryGroups = async (req, res, next) => {
       LEFT JOIN customers c ON c.id = sm.supplier_id
     `;
 
-    const groupBy = `GROUP BY sm.supplier_id, c.customer_name, COALESCE(sm.received_date, sm.created_at::date)::date`;
+    const groupBy = `GROUP BY sm.voucher_number, sm.supplier_id, c.customer_name, COALESCE(sm.received_date, sm.created_at::date)::date`;
 
     // Count
     const countQuery = `SELECT COUNT(*) FROM (SELECT 1 ${baseFrom}${whereClause} ${groupBy}) sub`;
@@ -536,12 +534,11 @@ const getStockEntryGroups = async (req, res, next) => {
     const offset = (Number(page) - 1) * Number(limit);
     const dataParams = [...params, Number(limit), offset];
     const dataQuery = `
-      SELECT sm.supplier_id, c.customer_name AS supplier_name,
+      SELECT sm.voucher_number, sm.supplier_id, c.customer_name AS supplier_name,
              TO_CHAR(COALESCE(sm.received_date, sm.created_at::date)::date, 'YYYY-MM-DD') AS received_date,
              COUNT(*) AS item_count,
              SUM(sm.quantity) AS total_quantity,
              (array_agg(sm.id ORDER BY sm.created_at ASC))[1] AS first_entry_id,
-             (array_agg(sm.voucher_number ORDER BY sm.created_at ASC))[1] AS voucher_number,
              (array_agg(sm.reference_number ORDER BY sm.created_at ASC))[1] AS reference_number,
              (array_agg(sm.party_name ORDER BY sm.created_at ASC))[1] AS party_name
       ${baseFrom}${whereClause}
@@ -557,12 +554,12 @@ const getStockEntryGroups = async (req, res, next) => {
   }
 };
 
-// GET /api/batches/stock-entries-by-group?supplier_id=x&date=y — all entries for a supplier+date
+// GET /api/batches/stock-entries-by-group?voucher_number=x — all entries for a voucher
 const getStockEntriesByGroup = async (req, res, next) => {
   try {
-    const { supplier_id, date } = req.query;
-    if (!supplier_id || !date) {
-      return res.status(400).json({ error: 'supplier_id and date are required' });
+    const { voucher_number } = req.query;
+    if (!voucher_number) {
+      return res.status(400).json({ error: 'voucher_number is required' });
     }
 
     const result = await pool.query(
@@ -578,10 +575,9 @@ const getStockEntriesByGroup = async (req, res, next) => {
        LEFT JOIN inventory_batches ib ON ib.id = sm.batch_id
        LEFT JOIN customers c ON c.id = sm.supplier_id
        WHERE sm.movement_type = 'IN'
-         AND sm.supplier_id = $1
-         AND COALESCE(sm.received_date, sm.created_at::date)::date = $2::date
+         AND sm.voucher_number = $1
        ORDER BY sm.created_at ASC`,
-      [supplier_id, date]
+      [voucher_number]
     );
     res.json(result.rows);
   } catch (err) {
@@ -669,28 +665,27 @@ const deleteStockEntry = async (req, res, next) => {
   }
 };
 
-// DELETE /api/batches/stock-entry-group — delete all entries for a supplier+date group
+// DELETE /api/batches/stock-entry-group — delete all entries for a voucher group
 const deleteStockEntryGroup = async (req, res, next) => {
   try {
-    const { supplier_id, date } = req.query;
-    if (!supplier_id || !date) {
-      return res.status(400).json({ error: 'supplier_id and date are required' });
+    const { voucher_number } = req.query;
+    if (!voucher_number) {
+      return res.status(400).json({ error: 'voucher_number is required' });
     }
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
-      // Get all IN movements for this supplier+date group
+      // Get all IN movements for this voucher
       const movementsResult = await client.query(
         `SELECT sm.*, ib.quantity_remaining AS batch_remaining, ib.quantity_received AS batch_received
          FROM stock_movements sm
          LEFT JOIN inventory_batches ib ON ib.id = sm.batch_id
          WHERE sm.movement_type = 'IN'
-           AND sm.supplier_id = $1
-           AND COALESCE(sm.received_date, sm.created_at::date)::date = $2::date
+           AND sm.voucher_number = $1
          FOR UPDATE`,
-        [supplier_id, date]
+        [voucher_number]
       );
 
       if (movementsResult.rows.length === 0) {

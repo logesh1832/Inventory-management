@@ -8,20 +8,19 @@ export default function MaterialInDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const supplierId = searchParams.get('supplier');
-  const date = searchParams.get('date');
+  const voucherNumber = searchParams.get('voucher');
 
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
-    if (!supplierId || !date) return;
-    api.get('/batches/stock-entries-by-group', { params: { supplier_id: supplierId, date } })
+    if (!voucherNumber) return;
+    api.get('/batches/stock-entries-by-group', { params: { voucher_number: voucherNumber } })
       .then((res) => setEntries(res.data))
       .catch(() => setToast({ message: 'Failed to load entries', type: 'error' }))
       .finally(() => setLoading(false));
-  }, [supplierId, date]);
+  }, [voucherNumber]);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -29,8 +28,8 @@ export default function MaterialInDetail() {
   };
 
   const fetchEntries = () => {
-    if (!supplierId || !date) return;
-    api.get('/batches/stock-entries-by-group', { params: { supplier_id: supplierId, date } })
+    if (!voucherNumber) return;
+    api.get('/batches/stock-entries-by-group', { params: { voucher_number: voucherNumber } })
       .then((res) => setEntries(res.data))
       .catch(() => showToast('Failed to load entries', 'error'));
   };
@@ -47,7 +46,6 @@ export default function MaterialInDetail() {
   };
 
   const supplierName = entries.length > 0 ? entries[0].supplier_name : '';
-  const voucherNumber = entries.length > 0 ? entries[0].voucher_number : '';
   const referenceNumber = entries.length > 0 ? entries[0].reference_number : '';
   const partyName = entries.length > 0 ? entries[0].party_name : '';
   const totalQty = entries.reduce((sum, e) => sum + e.quantity, 0);
@@ -151,7 +149,7 @@ export default function MaterialInDetail() {
               {partyName && <p className="text-xs text-gray-500">{partyName}</p>}
             </div>
             <div className="text-right">
-              <p className="text-xs text-gray-700">Received Date : <span className="font-semibold">{fmtDate(date)}</span></p>
+              <p className="text-xs text-gray-700">Received Date : <span className="font-semibold">{fmtDate(entries[0]?.received_date)}</span></p>
               {user && <p className="text-xs text-gray-500">Created By : {user.name}</p>}
             </div>
           </div>

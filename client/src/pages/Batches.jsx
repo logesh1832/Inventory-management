@@ -98,7 +98,7 @@ export default function Batches() {
         break;
       case 'Enter':
         e.preventDefault();
-        if (g) navigate(`/batches/view?supplier=${g.supplier_id}&date=${toDateStr(g.received_date)}`);
+        if (g) navigate(`/batches/view?voucher=${g.voucher_number}`);
         break;
       case 'e':
       case 'E':
@@ -108,7 +108,7 @@ export default function Batches() {
       case 'd':
       case 'D':
         e.preventDefault();
-        if (g) handleDeleteGroup(g.supplier_id, g.received_date, g.supplier_name);
+        if (g) handleDeleteGroup(g.voucher_number, g.supplier_name);
         break;
       default:
         break;
@@ -121,10 +121,10 @@ export default function Batches() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  const handleDeleteGroup = async (supplierId, receivedDate, supplierName) => {
-    if (!window.confirm(`Are you sure you want to delete ALL stock entries from ${supplierName} on ${fmtDate(receivedDate)}? This will reverse batch quantities.`)) return;
+  const handleDeleteGroup = async (voucherNumber, supplierName) => {
+    if (!window.confirm(`Are you sure you want to delete ALL stock entries for voucher ${voucherNumber} from ${supplierName}? This will reverse batch quantities.`)) return;
     try {
-      await api.delete('/batches/stock-entry-group', { params: { supplier_id: supplierId, date: receivedDate } });
+      await api.delete('/batches/stock-entry-group', { params: { voucher_number: voucherNumber } });
       showToast('Stock entries deleted successfully');
       fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, page);
     } catch (err) {
@@ -236,9 +236,9 @@ export default function Batches() {
           <div className="md:hidden space-y-3">
             {entries.map((g, idx) => (
               <div
-                key={`${g.supplier_id}-${g.received_date}`}
+                key={g.voucher_number}
                 className={`bg-white rounded-lg shadow p-4 space-y-2 cursor-pointer active:bg-gray-50 ${selectedIndex === idx ? 'ring-2 ring-yellow-400 bg-yellow-50' : ''}`}
-                onClick={() => { setSelectedIndex(idx); navigate(`/batches/view?supplier=${g.supplier_id}&date=${toDateStr(g.received_date)}`); }}
+                onClick={() => { setSelectedIndex(idx); navigate(`/batches/view?voucher=${g.voucher_number}`); }}
               >
                 <div className="flex items-center justify-between">
                   <div>
@@ -271,7 +271,7 @@ export default function Batches() {
                     Edit
                   </button>
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleDeleteGroup(g.supplier_id, g.received_date, g.supplier_name); }}
+                    onClick={(e) => { e.stopPropagation(); handleDeleteGroup(g.voucher_number, g.supplier_name); }}
                     className="text-red-600 hover:text-red-800 text-xs font-medium"
                   >
                     Delete
@@ -297,9 +297,9 @@ export default function Batches() {
               <tbody className="divide-y divide-gray-200">
                 {entries.map((g, idx) => (
                   <tr
-                    key={`${g.supplier_id}-${g.received_date}`}
+                    key={g.voucher_number}
                     className={`cursor-pointer ${selectedIndex === idx ? 'bg-yellow-50 ring-2 ring-inset ring-yellow-400' : 'hover:bg-gray-50'}`}
-                    onClick={() => { setSelectedIndex(idx); navigate(`/batches/view?supplier=${g.supplier_id}&date=${toDateStr(g.received_date)}`); }}
+                    onClick={() => { setSelectedIndex(idx); navigate(`/batches/view?voucher=${g.voucher_number}`); }}
                   >
                     <td className="px-5 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">
                       <div>{g.voucher_number || '\u2014'}</div>
@@ -331,7 +331,7 @@ export default function Batches() {
                           Edit
                         </button>
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleDeleteGroup(g.supplier_id, g.received_date, g.supplier_name); }}
+                          onClick={(e) => { e.stopPropagation(); handleDeleteGroup(g.voucher_number, g.supplier_name); }}
                           className="text-red-600 hover:text-red-800 text-sm font-medium"
                         >
                           Delete
