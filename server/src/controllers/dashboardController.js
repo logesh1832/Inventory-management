@@ -28,8 +28,12 @@ const getInventoryDashboard = async (req, res, next) => {
            SELECT p.id FROM products p
            LEFT JOIN inventory_batches ib ON ib.product_id = p.id
            WHERE p.status = 'active'
-           GROUP BY p.id, p.low_stock_threshold
-           HAVING COALESCE(SUM(ib.quantity_remaining), 0) < COALESCE(p.low_stock_threshold, 50)
+           GROUP BY p.id, p.low_stock_threshold, p.sub_unit, p.qty_per_box
+           HAVING CASE
+             WHEN p.sub_unit IS NOT NULL AND p.qty_per_box IS NOT NULL AND p.qty_per_box > 0
+             THEN COALESCE(SUM(ib.quantity_remaining), 0)::numeric / p.qty_per_box
+             ELSE COALESCE(SUM(ib.quantity_remaining), 0)
+           END < COALESCE(p.low_stock_threshold, 50)
          ) sub`
       ),
       pool.query(

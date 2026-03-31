@@ -7,6 +7,11 @@ const stockBadge = (qty, threshold = 50) => {
   return 'bg-green-100 text-green-700';
 };
 
+const primaryStock = (p) => {
+  if (p.sub_unit && p.qty_per_box) return p.total_stock / p.qty_per_box;
+  return p.total_stock;
+};
+
 export default function StockReport() {
   const navigate = useNavigate();
   const [stock, setStock] = useState([]);
@@ -90,8 +95,8 @@ export default function StockReport() {
               >
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-gray-900">{p.product_name}</span>
-                  <span className={`inline-block px-2 py-1 rounded text-sm font-semibold ${stockBadge(p.total_stock, p.low_stock_threshold)}`}>
-                    {p.total_stock}
+                  <span className={`inline-block px-2 py-1 rounded text-sm font-semibold ${stockBadge(primaryStock(p), p.low_stock_threshold)}`}>
+                    {primaryStock(p)} {p.unit}
                   </span>
                 </div>
                 <div className="text-sm text-gray-500">
@@ -132,8 +137,8 @@ export default function StockReport() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{p.product_code}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{p.unit}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-block px-2 py-1 rounded text-sm font-semibold ${stockBadge(p.total_stock, p.low_stock_threshold)}`}>
-                        {p.total_stock}
+                      <span className={`inline-block px-2 py-1 rounded text-sm font-semibold ${stockBadge(primaryStock(p), p.low_stock_threshold)}`}>
+                        {primaryStock(p)} {p.unit}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

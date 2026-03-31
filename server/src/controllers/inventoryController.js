@@ -141,6 +141,8 @@ const getStockReport = async (req, res, next) => {
         p.product_name,
         p.product_code,
         p.unit,
+        p.sub_unit,
+        p.qty_per_box,
         p.low_stock_threshold,
         COALESCE(SUM(ib.quantity_remaining), 0)::int AS total_stock
       FROM products p
@@ -154,13 +156,21 @@ const getStockReport = async (req, res, next) => {
       query += ` AND p.id = $${params.length}`;
     }
 
-    query += ` GROUP BY p.id, p.product_name, p.product_code, p.unit, p.low_stock_threshold`;
+    query += ` GROUP BY p.id, p.product_name, p.product_code, p.unit, p.sub_unit, p.qty_per_box, p.low_stock_threshold`;
 
     if (low_stock_threshold) {
       params.push(Number(low_stock_threshold));
-      query += ` HAVING COALESCE(SUM(ib.quantity_remaining), 0) < $${params.length}`;
+      query += ` HAVING CASE
+        WHEN p.sub_unit IS NOT NULL AND p.qty_per_box IS NOT NULL AND p.qty_per_box > 0
+        THEN COALESCE(SUM(ib.quantity_remaining), 0)::numeric / p.qty_per_box
+        ELSE COALESCE(SUM(ib.quantity_remaining), 0)
+      END < $${params.length}`;
     } else if (low_stock) {
-      query += ` HAVING COALESCE(SUM(ib.quantity_remaining), 0) < COALESCE(p.low_stock_threshold, 50)`;
+      query += ` HAVING CASE
+        WHEN p.sub_unit IS NOT NULL AND p.qty_per_box IS NOT NULL AND p.qty_per_box > 0
+        THEN COALESCE(SUM(ib.quantity_remaining), 0)::numeric / p.qty_per_box
+        ELSE COALESCE(SUM(ib.quantity_remaining), 0)
+      END < COALESCE(p.low_stock_threshold, 50)`;
     }
 
     query += ` ORDER BY p.product_name ASC`;
