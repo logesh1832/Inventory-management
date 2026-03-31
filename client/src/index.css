@@ -64,9 +64,9 @@
     border-bottom: 1px solid #d1d5db;
   }
 
-  /* Page settings — A5 landscape for compact invoices */
+  /* Page settings — A5 for compact invoices */
   @page {
-    margin: 10mm;
+    margin: 5mm 10mm;
     size: A5;
   }
 }

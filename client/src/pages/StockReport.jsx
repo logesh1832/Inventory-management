@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-const stockBadge = (qty) => {
-  if (qty < 50) return 'bg-red-100 text-red-700';
-  if (qty <= 200) return 'bg-yellow-100 text-yellow-700';
+const stockBadge = (qty, threshold = 50) => {
+  if (qty < threshold) return 'bg-red-100 text-red-700';
+  if (qty <= threshold * 4) return 'bg-yellow-100 text-yellow-700';
   return 'bg-green-100 text-green-700';
 };
 
@@ -18,7 +18,7 @@ export default function StockReport() {
     try {
       setLoading(true);
       const params = {};
-      if (lowStock) params.low_stock_threshold = 50;
+      if (lowStock) params.low_stock = true;
       const res = await api.get('/inventory/stock-report', { params });
       setStock(res.data);
     } catch {
@@ -54,7 +54,7 @@ export default function StockReport() {
             onChange={handleLowStockToggle}
             className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
           />
-          <span className="text-sm font-medium text-gray-700">Low stock only (&lt; 50)</span>
+          <span className="text-sm font-medium text-gray-700">Low stock only</span>
         </label>
       </div>
 
@@ -90,7 +90,7 @@ export default function StockReport() {
               >
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-gray-900">{p.product_name}</span>
-                  <span className={`inline-block px-2 py-1 rounded text-sm font-semibold ${stockBadge(p.total_stock)}`}>
+                  <span className={`inline-block px-2 py-1 rounded text-sm font-semibold ${stockBadge(p.total_stock, p.low_stock_threshold)}`}>
                     {p.total_stock}
                   </span>
                 </div>
@@ -99,6 +99,9 @@ export default function StockReport() {
                 </div>
                 <div className="text-sm text-gray-500">
                   <span className="text-gray-400">Unit:</span> {p.unit}
+                </div>
+                <div className="text-sm text-gray-500">
+                  <span className="text-gray-400">Threshold:</span> {p.low_stock_threshold ?? 50}
                 </div>
                 <div className="text-xs text-gray-400">Tap to view movements</div>
               </div>
@@ -114,6 +117,7 @@ export default function StockReport() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Stock</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Threshold</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"></th>
                 </tr>
               </thead>
@@ -128,9 +132,12 @@ export default function StockReport() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{p.product_code}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{p.unit}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-block px-2 py-1 rounded text-sm font-semibold ${stockBadge(p.total_stock)}`}>
+                      <span className={`inline-block px-2 py-1 rounded text-sm font-semibold ${stockBadge(p.total_stock, p.low_stock_threshold)}`}>
                         {p.total_stock}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {p.low_stock_threshold ?? 50}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                       View Details

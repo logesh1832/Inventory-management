@@ -2,7 +2,7 @@ const pool = require('../config/db');
 
 const createOrder = async (req, res, next) => {
   try {
-    const { customer_id, order_date, items } = req.body;
+    const { customer_id, order_date, items, reference_number, party_name } = req.body;
 
     if (!customer_id) {
       return res.status(400).json({ error: 'customer_id is required' });
@@ -36,17 +36,17 @@ const createOrder = async (req, res, next) => {
       );
       let nextNumber = 1;
       if (lastOrder.rows.length > 0) {
-        const lastNum = parseInt(lastOrder.rows[0].invoice_number.replace('INV-', ''), 10);
+        const lastNum = parseInt(lastOrder.rows[0].invoice_number.replace(/^(INV-|MO-)/, ''), 10);
         if (!isNaN(lastNum)) nextNumber = lastNum + 1;
       }
-      const invoiceNumber = `INV-${String(nextNumber).padStart(4, '0')}`;
+      const invoiceNumber = `MO-${String(nextNumber).padStart(4, '0')}`;
 
       // Insert order
       const orderResult = await client.query(
-        `INSERT INTO orders (invoice_number, customer_id, order_date, status)
-         VALUES ($1, $2, $3, 'completed')
+        `INSERT INTO orders (invoice_number, customer_id, order_date, status, reference_number, party_name)
+         VALUES ($1, $2, $3, 'completed', $4, $5)
          RETURNING *`,
-        [invoiceNumber, customer_id, order_date || new Date().toISOString().split('T')[0]]
+        [invoiceNumber, customer_id, order_date || new Date().toISOString().split('T')[0], reference_number || null, party_name || null]
       );
       const order = orderResult.rows[0];
 
@@ -175,7 +175,7 @@ const createOrder = async (req, res, next) => {
 
 const getAllOrders = async (req, res, next) => {
   try {
-    const { customer_id, status, from_date, to_date, page = 1, limit = 20 } = req.query;
+    const { customer_id, product_id, status, from_date, to_date, page = 1, limit = 20 } = req.query;
 
     const baseFrom = `
       FROM orders o
@@ -187,6 +187,10 @@ const getAllOrders = async (req, res, next) => {
     if (customer_id) {
       params.push(customer_id);
       conditions.push(`o.customer_id = $${params.length}`);
+    }
+    if (product_id) {
+      params.push(product_id);
+      conditions.push(`EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id AND oi.product_id = $${params.length})`);
     }
     if (status) {
       params.push(status);
@@ -302,7 +306,7 @@ const getOrderById = async (req, res, next) => {
 const updateOrder = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { customer_id, order_date, items } = req.body;
+    const { customer_id, order_date, items, reference_number, party_name } = req.body;
 
     if (!customer_id) {
       return res.status(400).json({ error: 'customer_id is required' });
@@ -351,8 +355,8 @@ const updateOrder = async (req, res, next) => {
 
       // 3. Update order header
       await client.query(
-        'UPDATE orders SET customer_id = $1, order_date = $2 WHERE id = $3',
-        [customer_id, order_date || new Date().toISOString().split('T')[0], id]
+        'UPDATE orders SET customer_id = $1, order_date = $2, reference_number = $3, party_name = $4 WHERE id = $5',
+        [customer_id, order_date || new Date().toISOString().split('T')[0], reference_number || null, party_name || null, id]
       );
 
       // 4. Re-create order items and deductions (same logic as createOrder)

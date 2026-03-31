@@ -13,6 +13,7 @@ const getInventoryDashboard = async (req, res, next) => {
       movementsRes,
       stockRes,
       usersRes,
+      materialInRes,
     ] = await Promise.all([
       pool.query("SELECT COUNT(*)::int AS count FROM products WHERE status = 'active'"),
       pool.query(
@@ -27,8 +28,8 @@ const getInventoryDashboard = async (req, res, next) => {
            SELECT p.id FROM products p
            LEFT JOIN inventory_batches ib ON ib.product_id = p.id
            WHERE p.status = 'active'
-           GROUP BY p.id
-           HAVING COALESCE(SUM(ib.quantity_remaining), 0) < 50
+           GROUP BY p.id, p.low_stock_threshold
+           HAVING COALESCE(SUM(ib.quantity_remaining), 0) < COALESCE(p.low_stock_threshold, 50)
          ) sub`
       ),
       pool.query(
@@ -54,6 +55,7 @@ const getInventoryDashboard = async (req, res, next) => {
          ORDER BY p.product_name ASC`
       ),
       pool.query("SELECT COUNT(*)::int AS count FROM users WHERE is_active = true"),
+      pool.query("SELECT COUNT(DISTINCT (supplier_id::text || received_date::text))::int AS count FROM stock_movements WHERE movement_type = 'IN' AND supplier_id IS NOT NULL"),
     ]);
 
     res.json({
@@ -61,6 +63,7 @@ const getInventoryDashboard = async (req, res, next) => {
       total_stock_value: parseFloat(stockValueRes.rows[0].total),
       total_customers: customersRes.rows[0].count,
       total_orders: ordersRes.rows[0].count,
+      total_material_in: materialInRes.rows[0].count,
       low_stock_count: lowStockRes.rows[0].count,
       recent_orders: recentOrdersRes.rows,
       recent_movements: movementsRes.rows,

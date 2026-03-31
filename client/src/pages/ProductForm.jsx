@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import api, { getFileUrl } from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
 
-const UNIT_OPTIONS = ['Pieces', 'Kg', 'Liters', 'Meters', 'Boxes', 'Rolls'];
 const STATUS_OPTIONS = ['active', 'inactive'];
 
 export default function ProductForm() {
@@ -14,14 +13,16 @@ export default function ProductForm() {
   const [form, setForm] = useState({
     product_name: '',
     product_code: '',
-    unit: 'Pieces',
+    unit: '',
     status: 'active',
     category: '',
     batch_tracking: false,
     qty_per_box: '',
+    low_stock_threshold: '',
   });
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
+  const [unitOptions, setUnitOptions] = useState([]);
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState(null);
@@ -31,6 +32,9 @@ export default function ProductForm() {
   useEffect(() => {
     api.get('/categories?active=true')
       .then(({ data }) => setCategoryOptions(data.map((c) => c.category_name)))
+      .catch(() => {});
+    api.get('/units')
+      .then(({ data }) => setUnitOptions(data))
       .catch(() => {});
   }, []);
 
@@ -46,6 +50,7 @@ export default function ProductForm() {
             category: data.category || '',
             batch_tracking: data.batch_tracking || false,
             qty_per_box: data.qty_per_box || '',
+            low_stock_threshold: data.low_stock_threshold || '',
           });
           if (data.image_url) setImagePreview(getFileUrl(data.image_url));
         })
@@ -62,10 +67,10 @@ export default function ProductForm() {
   const validate = () => {
     const newErrors = {};
     if (!form.product_name.trim()) newErrors.product_name = 'Product name is required';
-    if (!form.product_code.trim()) newErrors.product_code = 'Product code is required';
     if (!form.unit) newErrors.unit = 'Unit is required';
-    if (form.unit === 'Boxes' && (!form.qty_per_box || Number(form.qty_per_box) <= 0)) {
-      newErrors.qty_per_box = 'Quantity per box is required';
+    const selectedUnit = unitOptions.find((u) => u.name === form.unit);
+    if (selectedUnit?.has_sub_unit && (!form.qty_per_box || Number(form.qty_per_box) <= 0)) {
+      newErrors.qty_per_box = `Quantity per ${selectedUnit.sub_unit_name || 'unit'} is required`;
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -105,6 +110,7 @@ export default function ProductForm() {
       formData.append('category', form.category);
       formData.append('batch_tracking', form.batch_tracking);
       formData.append('qty_per_box', form.qty_per_box || '');
+      formData.append('low_stock_threshold', form.low_stock_threshold || '50');
       if (imageFile) formData.append('image', imageFile);
 
       const config = { headers: { 'Content-Type': 'multipart/form-data' } };
@@ -159,7 +165,7 @@ export default function ProductForm() {
         {/* Product Code */}
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Product Code <span className="text-red-500">*</span>
+            Product Code
           </label>
           <input
             type="text"
@@ -229,31 +235,52 @@ export default function ProductForm() {
             onChange={handleChange}
             className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 ${errors.unit ? 'border-red-500' : 'border-gray-300'}`}
           >
-            {UNIT_OPTIONS.map((u) => (
-              <option key={u} value={u}>{u}</option>
+            <option value="">Select Unit</option>
+            {unitOptions.map((u) => (
+              <option key={u.id} value={u.name}>{u.name}</option>
             ))}
           </select>
         </div>
 
-        {/* Qty per Box (only for Boxes unit) */}
-        {form.unit === 'Boxes' && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Qty per Box <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="number"
-              name="qty_per_box"
-              value={form.qty_per_box}
-              onChange={handleChange}
-              min="1"
-              placeholder="e.g. 12"
-              className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 ${errors.qty_per_box ? 'border-red-500' : 'border-gray-300'}`}
-            />
-            <p className="text-gray-400 text-xs mt-1">How many pieces/items in each box</p>
-            {errors.qty_per_box && <p className="text-red-500 text-xs mt-1">{errors.qty_per_box}</p>}
-          </div>
-        )}
+        {/* Qty per Sub Unit (only when selected unit has sub unit) */}
+        {(() => {
+          const selectedUnit = unitOptions.find((u) => u.name === form.unit);
+          if (!selectedUnit?.has_sub_unit) return null;
+          const subLabel = selectedUnit.sub_unit_name || 'Unit';
+          return (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Qty per {subLabel} <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                name="qty_per_box"
+                value={form.qty_per_box}
+                onChange={handleChange}
+                min="1"
+                placeholder="e.g. 12"
+                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 ${errors.qty_per_box ? 'border-red-500' : 'border-gray-300'}`}
+              />
+              <p className="text-gray-400 text-xs mt-1">How many {subLabel.toLowerCase()} in each {selectedUnit.name.toLowerCase()}</p>
+              {errors.qty_per_box && <p className="text-red-500 text-xs mt-1">{errors.qty_per_box}</p>}
+            </div>
+          );
+        })()}
+
+        {/* Low Stock Threshold */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Low Stock Threshold</label>
+          <input
+            type="number"
+            name="low_stock_threshold"
+            value={form.low_stock_threshold}
+            onChange={handleChange}
+            min="0"
+            placeholder="50"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
+          />
+          <p className="text-xs text-gray-400 mt-1">Alert when stock falls below this number</p>
+        </div>
 
         {/* Batch Tracking Toggle */}
         <div className="mb-4 border-t border-gray-100 pt-4">

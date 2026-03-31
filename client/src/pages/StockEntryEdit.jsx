@@ -7,7 +7,8 @@ import DateInput from '../components/DateInput';
 const toDateStr = (v) => {
   if (!v) return '';
   const d = new Date(v);
-  return isNaN(d) ? '' : d.toISOString().split('T')[0];
+  if (isNaN(d)) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
 const focusProduct = (rowId) => {
@@ -65,6 +66,8 @@ export default function StockEntryEdit() {
   // Header fields
   const [supplierId, setSupplierId] = useState('');
   const [receivedDate, setReceivedDate] = useState('');
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const [partyName, setPartyName] = useState('');
 
   // Rows: existing entries have a UUID id, new ones have "new-..." prefix
   const [rows, setRows] = useState([]);
@@ -99,6 +102,8 @@ export default function StockEntryEdit() {
 
       setSupplierId(entries[0].supplier_id || '');
       setReceivedDate(toDateStr(entries[0].received_date));
+      setReferenceNumber(entries[0].reference_number || '');
+      setPartyName(entries[0].party_name || '');
 
       const rowsData = [];
       for (const e of entries) {
@@ -272,6 +277,8 @@ export default function StockEntryEdit() {
           quantity: Number(row.quantity),
           supplier_id: supplierId || null,
           received_date: receivedDate || null,
+          reference_number: referenceNumber || null,
+          party_name: partyName || null,
         };
 
         if (row.batchMode === 'existing') {
@@ -305,6 +312,8 @@ export default function StockEntryEdit() {
         await api.post('/batches/bulk', {
           supplier_id: supplierId,
           received_date: receivedDate,
+          reference_number: referenceNumber || undefined,
+          party_name: partyName || undefined,
           items,
         });
       }
@@ -459,6 +468,20 @@ export default function StockEntryEdit() {
                 className={`w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 ${errors.date ? 'border-red-500' : 'border-gray-300'}`}
               />
               {errors.date && <p className="text-red-500 text-xs mt-1">{errors.date}</p>}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Reference Number</label>
+              <input type="text" value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)}
+                placeholder="Enter reference number"
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Party Name</label>
+              <input type="text" value={partyName} onChange={(e) => setPartyName(e.target.value)}
+                placeholder="Enter customer/party name"
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500" />
             </div>
           </div>
         </div>

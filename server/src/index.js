@@ -15,6 +15,7 @@ const inventoryRoutes = require('./routes/inventoryRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const roleRoutes = require('./routes/roleRoutes');
+const unitRoutes = require('./routes/unitRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -41,6 +42,7 @@ app.use('/api/orders', authenticate, requireRole('admin', 'inventory'), orderRou
 app.use('/api/categories', authenticate, categoryRoutes);
 app.use('/api/inventory', authenticate, inventoryRoutes);
 app.use('/api/roles', roleRoutes);
+app.use('/api/units', authenticate, unitRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
 // Error handler (must be last)

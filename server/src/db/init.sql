@@ -12,6 +12,17 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- ============================================
+-- Units table
+-- ============================================
+CREATE TABLE IF NOT EXISTS units (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL UNIQUE,
+    has_sub_unit BOOLEAN DEFAULT false,
+    sub_unit_name VARCHAR(100),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ============================================
 -- Products table
 -- ============================================
 CREATE TABLE IF NOT EXISTS products (
@@ -21,6 +32,7 @@ CREATE TABLE IF NOT EXISTS products (
     unit VARCHAR(50) NOT NULL DEFAULT 'pcs',
     qty_per_box INTEGER DEFAULT NULL,
     image_url TEXT,
+    low_stock_threshold INTEGER DEFAULT 50,
     unit_price DECIMAL(10,2) DEFAULT 0,
     category VARCHAR(100),
     batch_tracking BOOLEAN DEFAULT false,
@@ -65,6 +77,8 @@ CREATE TABLE IF NOT EXISTS orders (
     customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
     order_date DATE NOT NULL DEFAULT CURRENT_DATE,
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    reference_number VARCHAR(100),
+    party_name TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -92,6 +106,8 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     supplier_id UUID REFERENCES customers(id) ON DELETE SET NULL,
     received_date DATE,
     voucher_number VARCHAR(100),
+    reference_number VARCHAR(100),
+    party_name TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -168,6 +184,26 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'image_url') THEN
         ALTER TABLE products ADD COLUMN image_url TEXT;
     END IF;
+    -- products: low_stock_threshold
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'low_stock_threshold') THEN
+        ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER DEFAULT 50;
+    END IF;
+    -- stock_movements: reference_number
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'stock_movements' AND column_name = 'reference_number') THEN
+        ALTER TABLE stock_movements ADD COLUMN reference_number VARCHAR(100);
+    END IF;
+    -- stock_movements: party_name
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'stock_movements' AND column_name = 'party_name') THEN
+        ALTER TABLE stock_movements ADD COLUMN party_name TEXT;
+    END IF;
+    -- orders: reference_number
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'reference_number') THEN
+        ALTER TABLE orders ADD COLUMN reference_number VARCHAR(100);
+    END IF;
+    -- orders: party_name
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'party_name') THEN
+        ALTER TABLE orders ADD COLUMN party_name TEXT;
+    END IF;
 END $$;
 
 -- ============================================
@@ -194,5 +230,45 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM roles WHERE name = 'inventory') THEN
         INSERT INTO roles (name, capabilities, is_system)
         VALUES ('inventory', ARRAY['dashboard','products','categories','material_in','movements','material_out','reports'], true);
+    END IF;
+END $$;
+
+-- ============================================
+-- Migration: create units table and seed defaults
+-- ============================================
+DO $$
+BEGIN
+    -- Create units table if not exists (handled above, but safe for standalone migration)
+    CREATE TABLE IF NOT EXISTS units (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        name VARCHAR(100) NOT NULL UNIQUE,
+        has_sub_unit BOOLEAN DEFAULT false,
+        sub_unit_name VARCHAR(100),
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+
+    -- Seed default units if they don't exist
+    IF NOT EXISTS (SELECT 1 FROM units WHERE name = 'Pieces') THEN
+        INSERT INTO units (name, has_sub_unit) VALUES ('Pieces', false);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM units WHERE name = 'Kg') THEN
+        INSERT INTO units (name, has_sub_unit) VALUES ('Kg', false);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM units WHERE name = 'Liters') THEN
+        INSERT INTO units (name, has_sub_unit) VALUES ('Liters', false);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM units WHERE name = 'Meters') THEN
+        INSERT INTO units (name, has_sub_unit) VALUES ('Meters', false);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM units WHERE name = 'Boxes') THEN
+        INSERT INTO units (name, has_sub_unit, sub_unit_name) VALUES ('Boxes', true, 'Pieces');
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM units WHERE name = 'Rolls') THEN
+        INSERT INTO units (name, has_sub_unit) VALUES ('Rolls', false);
     END IF;
 END $$;

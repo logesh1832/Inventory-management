@@ -52,8 +52,8 @@ export default function OrderDetail() {
     const qtyPerBox = item.qty_per_box;
 
     if (unit === 'Boxes' && qtyPerBox) {
-      const totalPcs = qty * qtyPerBox;
-      return <span>{qty} Box ({totalPcs} PCS)</span>;
+      const boxes = qty / qtyPerBox;
+      return <span>{boxes} Box ({qty} PCS)</span>;
     }
     return <span>{qty} {unit}</span>;
   };
@@ -104,22 +104,25 @@ export default function OrderDetail() {
       <div className="bg-white rounded shadow print-area" id="print-invoice">
         <div className="p-4 sm:p-6">
 
+          <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Material Out</p>
           {/* Header */}
           <div className="flex items-start justify-between mb-3">
             <h2 className="text-sm font-bold text-gray-900">GREE Marketing India LLP</h2>
             <div className="text-right">
               <h3 className="text-base font-bold text-gray-800">ORDER #{order.invoice_number}</h3>
+              {order.reference_number && <p className="text-xs text-gray-500">Ref: {order.reference_number}</p>}
             </div>
           </div>
 
           {/* Order Info */}
           <div className="flex justify-between mb-3">
             <div>
-              <p className="text-[10px] text-gray-500 italic">Order From</p>
+              <p className="text-[10px] text-gray-500 italic">Dispatch To</p>
               <p className="text-xs font-semibold text-gray-800">{order.customer_name}</p>
+              {order.party_name && <p className="text-xs text-gray-500">{order.party_name}</p>}
             </div>
             <div className="text-right">
-              <p className="text-xs text-gray-700">Order Date : <span className="font-semibold">{fmtDate(order.order_date)}</span></p>
+              <p className="text-xs text-gray-700">Dispatch Date : <span className="font-semibold">{fmtDate(order.order_date)}</span></p>
               {user && <p className="text-xs text-gray-500">Created By : {user.name}</p>}
             </div>
           </div>
@@ -130,26 +133,26 @@ export default function OrderDetail() {
               <tr className="bg-gray-50">
                 <th className="py-1 px-2 text-left text-[10px] font-bold text-gray-700 w-8 border border-gray-300">#</th>
                 <th className="py-1 px-2 text-left text-[10px] font-bold text-gray-700 border border-gray-300">Item</th>
+                <th className="py-1 px-2 text-left text-[10px] font-bold text-gray-700 border border-gray-300">Batch</th>
                 <th className="py-1 px-2 text-right text-[10px] font-bold text-gray-700 w-28 border border-gray-300">Quantity</th>
               </tr>
             </thead>
             <tbody>
-              {order.items.map((item, index) => (
-                <tr key={item.id}>
-                  <td className="py-1 px-2 text-xs text-gray-600 align-top border border-gray-300">{index + 1}</td>
-                  <td className="py-1 px-2 text-[11px] text-gray-800 align-top border border-gray-300">
-                    <div className="flex items-center gap-1.5">
-                      {item.image_url ? (
-                        <img src={getFileUrl(item.image_url)} alt="" className="h-6 w-6 rounded object-cover flex-shrink-0" />
-                      ) : null}
-                      <span>{item.product_code} - {item.product_name}</span>
-                    </div>
-                  </td>
-                  <td className="py-1 px-2 text-xs text-right align-top border border-gray-300">
-                    {formatQty(item)}
-                  </td>
-                </tr>
-              ))}
+              {order.items.map((item, index) => {
+                const batchList = item.deductions?.map((d) => d.batch_number).filter(Boolean).join(', ') || '—';
+                return (
+                  <tr key={item.id}>
+                    <td className="py-1 px-2 text-xs text-gray-600 align-top border border-gray-300">{index + 1}</td>
+                    <td className="py-1 px-2 text-[11px] text-gray-800 align-top border border-gray-300">
+                      {item.product_code} - {item.product_name}
+                    </td>
+                    <td className="py-1 px-2 text-[10px] text-gray-600 align-top border border-gray-300">{batchList}</td>
+                    <td className="py-1 px-2 text-xs text-right align-top border border-gray-300">
+                      {formatQty(item)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

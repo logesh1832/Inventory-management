@@ -160,9 +160,9 @@ export default function Products() {
                   <div className="text-sm text-gray-500">
                     <span className="text-gray-400">Stock:</span>{' '}
                     <span className={`inline-block px-2 py-0.5 text-xs font-semibold rounded-full ${
-                      product.available_stock > 200 ? 'bg-green-100 text-green-700' :
-                      product.available_stock >= 50 ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-red-100 text-red-700'
+                      product.available_stock < (product.low_stock_threshold ?? 50) ? 'bg-red-100 text-red-700' :
+                      product.available_stock <= (product.low_stock_threshold ?? 50) * 4 ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-green-100 text-green-700'
                     }`}>
                       {product.available_stock}
                     </span>
@@ -228,9 +228,9 @@ export default function Products() {
                     {!isSalesperson && (
                       <td className="px-6 py-4 text-right">
                         <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
-                          product.available_stock > 200 ? 'bg-green-100 text-green-700' :
-                          product.available_stock >= 50 ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-red-100 text-red-700'
+                          product.available_stock < (product.low_stock_threshold ?? 50) ? 'bg-red-100 text-red-700' :
+                          product.available_stock <= (product.low_stock_threshold ?? 50) * 4 ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-green-100 text-green-700'
                         }`}>
                           {product.available_stock}
                         </span>

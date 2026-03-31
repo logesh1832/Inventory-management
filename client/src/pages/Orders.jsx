@@ -7,16 +7,22 @@ import { fmtDate } from '../utils/date';
 import DateInput from '../components/DateInput';
 
 const today = () => new Date().toISOString().split('T')[0];
+const monthStart = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+};
 
 export default function Orders() {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [total, setTotal] = useState(0);
   const [customers, setCustomers] = useState([]);
+  const [products, setProducts] = useState([]);
   const [filters, setFilters] = useState({
     customer_id: '',
+    product_id: '',
     status: '',
-    from_date: today(),
+    from_date: monthStart(),
     to_date: today(),
   });
   const [page, setPage] = useState(1);
@@ -48,6 +54,7 @@ export default function Orders() {
 
   useEffect(() => {
     api.get('/customers').then((res) => setCustomers(res.data)).catch(() => {});
+    api.get('/products').then((res) => setProducts(res.data)).catch(() => {});
     fetchOrders(filters, 1);
   }, []);
 
@@ -147,7 +154,7 @@ export default function Orders() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
           <SearchableSelect
@@ -155,6 +162,15 @@ export default function Orders() {
             value={filters.customer_id}
             onChange={(val) => handleFilterChange({ target: { name: 'customer_id', value: val } })}
             placeholder="All Customers"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
+          <SearchableSelect
+            options={products.map((p) => ({ value: p.id, label: `${p.product_name} (${p.product_code})` }))}
+            value={filters.product_id}
+            onChange={(val) => handleFilterChange({ target: { name: 'product_id', value: val } })}
+            placeholder="All Products"
           />
         </div>
         <div>
@@ -214,7 +230,10 @@ export default function Orders() {
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="font-medium text-gray-900">{o.invoice_number}</span>
+                <div>
+                  <span className="font-medium text-gray-900">{o.invoice_number}</span>
+                  {o.reference_number && <span className="text-xs text-gray-400 ml-1">({o.reference_number})</span>}
+                </div>
                 <span
                   className={`px-2 py-1 rounded-full text-xs font-semibold ${
                     o.status === 'completed'
@@ -227,6 +246,7 @@ export default function Orders() {
               </div>
               <div className="text-sm text-gray-500">
                 <span className="text-gray-400">Customer:</span> {o.customer_name}
+                {o.party_name && <span className="text-xs text-gray-400 ml-1">({o.party_name})</span>}
               </div>
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-500">
@@ -274,8 +294,14 @@ export default function Orders() {
                       : 'hover:bg-gray-50'
                   }`}
                 >
-                  <td className="px-6 py-4 whitespace-nowrap font-medium">{o.invoice_number}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{o.customer_name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="font-medium">{o.invoice_number}</div>
+                    {o.reference_number && <div className="text-xs text-gray-400">{o.reference_number}</div>}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div>{o.customer_name}</div>
+                    {o.party_name && <div className="text-xs text-gray-400">{o.party_name}</div>}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {fmtDate(o.order_date)}
                   </td>

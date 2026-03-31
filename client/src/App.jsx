@@ -22,6 +22,7 @@ import ProductReport from './pages/ProductReport';
 import ProductMovementDetail from './pages/ProductMovementDetail';
 import UserManagement from './pages/UserManagement';
 import RoleManagement from './pages/RoleManagement';
+import UnitManagement from './pages/UnitManagement';
 
 function App() {
   return (
@@ -57,6 +58,7 @@ function App() {
 
               <Route path="/users" element={<UserManagement />} />
               <Route path="/roles" element={<RoleManagement />} />
+              <Route path="/units" element={<UnitManagement />} />
             </Route>
           </Route>
         </Routes>

@@ -64,6 +64,8 @@ export default function BatchForm() {
   const [suppliers, setSuppliers] = useState([]);
   const [supplierId, setSupplierId] = useState('');
   const [receivedDate, setReceivedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const [partyName, setPartyName] = useState('');
   const [rows, setRows] = useState([emptyRow()]);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
@@ -282,6 +284,8 @@ export default function BatchForm() {
       await api.post('/batches/bulk', {
         supplier_id: supplierId,
         received_date: receivedDate,
+        reference_number: referenceNumber || undefined,
+        party_name: partyName || undefined,
         items,
       });
 
@@ -350,20 +354,26 @@ export default function BatchForm() {
               {errors.date && <p className="text-red-500 text-xs mt-1">{errors.date}</p>}
             </div>
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Reference Number</label>
+              <input type="text" value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)}
+                placeholder="Enter reference number"
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Party Name</label>
+              <input type="text" value={partyName} onChange={(e) => setPartyName(e.target.value)}
+                placeholder="Enter customer/party name"
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+            </div>
+          </div>
         </div>
 
         {/* Items */}
         <div className="bg-white rounded-lg shadow overflow-hidden mb-4">
-          <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+          <div className="px-5 py-3 border-b border-gray-200">
             <h3 className="text-sm font-semibold text-gray-700">Items</h3>
-            <button
-              type="button"
-              onClick={addRow}
-              tabIndex={-1}
-              className="text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1 rounded font-medium transition-colors"
-            >
-              + Add Row
-            </button>
           </div>
 
           <div className="divide-y divide-gray-100">
@@ -409,25 +419,54 @@ export default function BatchForm() {
                   </div>
                   <div className="sm:col-span-4">
                     <label className="block text-xs font-medium text-gray-500 mb-1">Quantity <span className="text-red-500">*</span></label>
-                    <input
-                      ref={(el) => (qtyRefs.current[row.id] = el)}
-                      type="number"
-                      min="1"
-                      value={row.quantity}
-                      onChange={(e) => updateRow(row.id, 'quantity', e.target.value)}
-                      onKeyDown={(e) => handleQtyKeyDown(e, row)}
-                      placeholder="0"
-                      className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500"
-                    />
+                    <div className="flex gap-1">
+                      <input
+                        ref={(el) => (qtyRefs.current[row.id] = el)}
+                        type="number"
+                        min="1"
+                        value={row.quantity}
+                        onChange={(e) => updateRow(row.id, 'quantity', e.target.value)}
+                        onKeyDown={(e) => handleQtyKeyDown(e, row)}
+                        placeholder="0"
+                        className="flex-1 border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500"
+                      />
+                      {(() => {
+                        const prod = products.find((p) => p.id === row.product_id);
+                        if (prod && prod.unit === 'Boxes' && prod.qty_per_box) {
+                          return (
+                            <select
+                              value={row.qty_unit || 'boxes'}
+                              onChange={(e) => updateRow(row.id, 'qty_unit', e.target.value)}
+                              className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500 bg-white"
+                            >
+                              <option value="boxes">Boxes</option>
+                              <option value="pieces">Pieces</option>
+                            </select>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
                     {(() => {
                       const prod = products.find((p) => p.id === row.product_id);
                       if (prod && prod.unit === 'Boxes' && prod.qty_per_box && row.quantity) {
-                        const total = Number(row.quantity) * prod.qty_per_box;
-                        return (
-                          <p className="text-xs text-blue-600 font-medium mt-1">
-                            {row.quantity} x {prod.qty_per_box} = {total} pcs
-                          </p>
-                        );
+                        const qty = Number(row.quantity);
+                        const ppb = prod.qty_per_box;
+                        if ((row.qty_unit || 'boxes') === 'boxes') {
+                          return (
+                            <p className="text-xs text-blue-600 font-medium mt-1">
+                              {qty} Box x {ppb} = {qty * ppb} pcs
+                            </p>
+                          );
+                        } else {
+                          const boxes = Math.floor(qty / ppb);
+                          const remaining = qty % ppb;
+                          return (
+                            <p className="text-xs text-blue-600 font-medium mt-1">
+                              {boxes > 0 ? `${boxes} Box` : ''}{boxes > 0 && remaining > 0 ? ' + ' : ''}{remaining > 0 ? `${remaining} pcs` : ''}{boxes === 0 && remaining === 0 ? '0 pcs' : ''}
+                            </p>
+                          );
+                        }
                       }
                       return null;
                     })()}
@@ -444,15 +483,17 @@ export default function BatchForm() {
                       data-batch-toggle={row.id}
                       tabIndex={0}
                       onKeyDown={(e) => handleBatchToggleKeyDown(e, row)}
-                      className="flex bg-gray-100 rounded text-xs overflow-hidden flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-yellow-500 rounded"
+                      className="flex bg-gray-100 rounded text-xs overflow-hidden flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-yellow-500"
                     >
                       <span
-                        className={`px-2.5 py-1 transition-colors cursor-default ${row.mode === 'existing' ? 'bg-yellow-500 text-gray-900 font-semibold' : 'text-gray-500'}`}
+                        onClick={() => updateRow(row.id, 'mode', 'existing')}
+                        className={`px-2.5 py-1 transition-colors cursor-pointer ${row.mode === 'existing' ? 'bg-yellow-500 text-gray-900 font-semibold' : 'text-gray-500 hover:bg-gray-200'}`}
                       >
                         Existing
                       </span>
                       <span
-                        className={`px-2.5 py-1 transition-colors cursor-default ${row.mode === 'new' ? 'bg-yellow-500 text-gray-900 font-semibold' : 'text-gray-500'}`}
+                        onClick={() => updateRow(row.id, 'mode', 'new')}
+                        className={`px-2.5 py-1 transition-colors cursor-pointer ${row.mode === 'new' ? 'bg-yellow-500 text-gray-900 font-semibold' : 'text-gray-500 hover:bg-gray-200'}`}
                       >
                         New
                       </span>
@@ -461,14 +502,16 @@ export default function BatchForm() {
                     {row.mode === 'existing' ? (
                       <div className="flex-1" data-batch-input={row.id}>
                         <SearchableSelect
-                          options={row.productBatches.filter((b) => b.batch_number).map((b) => ({
+                          options={row.productBatches.map((b) => ({
                             value: b.id,
-                            label: `${b.batch_number} (Remaining: ${b.quantity_remaining})`,
+                            label: b.batch_number
+                              ? `${b.batch_number} (Remaining: ${b.quantity_remaining})`
+                              : `No batch — Received ${b.received_date ? b.received_date.slice(0, 10) : ''} (Remaining: ${b.quantity_remaining})`,
                           }))}
                           value={row.existing_batch_id}
                           onChange={(val) => updateRow(row.id, 'existing_batch_id', val)}
                           placeholder={!row.product_id ? 'Select product first' : row.productBatches.length === 0 ? 'No existing batches' : 'Select batch...'}
-                          disabled={!row.product_id || row.productBatches.filter((b) => b.batch_number).length === 0}
+                          disabled={!row.product_id || row.productBatches.length === 0}
                           onEnterAfterSelect={() => goToNextRowOrAdd(row.id)}
                         />
                       </div>
@@ -519,6 +562,18 @@ export default function BatchForm() {
                 )}
               </div>
             ))}
+          </div>
+
+          {/* Add Row button at bottom */}
+          <div className="px-5 py-3 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={addRow}
+              tabIndex={-1}
+              className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              + Add Row
+            </button>
           </div>
         </div>
 

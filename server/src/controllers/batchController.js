@@ -1,22 +1,22 @@
 const pool = require('../config/db');
 
-// Generate next voucher number: VCH-0001, VCH-0002, ...
+// Generate next voucher number: MI-0001, MI-0002, ...
 const generateVoucherNumber = async (client) => {
   const last = await client.query(
     "SELECT voucher_number FROM stock_movements WHERE voucher_number IS NOT NULL ORDER BY created_at DESC LIMIT 1"
   );
   let nextNumber = 1;
   if (last.rows.length > 0) {
-    const lastNum = parseInt(last.rows[0].voucher_number.replace('VCH-', ''), 10);
+    const lastNum = parseInt(last.rows[0].voucher_number.replace(/^(VCH-|MI-)/, ''), 10);
     if (!isNaN(lastNum)) nextNumber = lastNum + 1;
   }
-  return `VCH-${String(nextNumber).padStart(4, '0')}`;
+  return `MI-${String(nextNumber).padStart(4, '0')}`;
 };
 
 // POST /api/batches — single batch create (kept for compatibility)
 const createBatch = async (req, res, next) => {
   try {
-    const { product_id, batch_number, quantity_received, received_date, supplier_id } = req.body;
+    const { product_id, batch_number, quantity_received, received_date, supplier_id, reference_number, party_name } = req.body;
 
     if (!product_id || quantity_received == null || !received_date) {
       return res.status(400).json({ error: 'product_id, quantity_received, and received_date are required' });
@@ -47,9 +47,9 @@ const createBatch = async (req, res, next) => {
       const batch = batchResult.rows[0];
 
       await client.query(
-        `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date, voucher_number)
-         VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5, $6)`,
-        [product_id, batch.id, quantity_received, supplier_id || null, received_date, voucherNumber]
+        `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date, voucher_number, reference_number, party_name)
+         VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5, $6, $7, $8)`,
+        [product_id, batch.id, quantity_received, supplier_id || null, received_date, voucherNumber, reference_number || null, party_name || null]
       );
 
       await client.query('COMMIT');
@@ -71,7 +71,7 @@ const createBatch = async (req, res, next) => {
 // POST /api/batches/bulk — create/update multiple batch items at once
 const createBulkBatches = async (req, res, next) => {
   try {
-    const { supplier_id, received_date, items } = req.body;
+    const { supplier_id, received_date, items, reference_number, party_name } = req.body;
 
     if (!supplier_id) {
       return res.status(400).json({ error: 'Supplier is required' });
@@ -124,9 +124,9 @@ const createBulkBatches = async (req, res, next) => {
 
           // Each stock entry records the supplier separately
           await client.query(
-            `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date, voucher_number)
-             VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5, $6)`,
-            [batch.product_id, batch.id, qty, supplier_id, received_date, voucherNumber]
+            `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date, voucher_number, reference_number, party_name)
+             VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5, $6, $7, $8)`,
+            [batch.product_id, batch.id, qty, supplier_id, received_date, voucherNumber, reference_number || null, party_name || null]
           );
 
           results.push({ action: 'updated', batch });
@@ -144,9 +144,9 @@ const createBulkBatches = async (req, res, next) => {
           const batch = batchResult.rows[0];
 
           await client.query(
-            `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date, voucher_number)
-             VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5, $6)`,
-            [item.product_id, batch.id, qty, supplier_id, received_date, voucherNumber]
+            `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date, voucher_number, reference_number, party_name)
+             VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5, $6, $7, $8)`,
+            [item.product_id, batch.id, qty, supplier_id, received_date, voucherNumber, reference_number || null, party_name || null]
           );
 
           results.push({ action: 'created', batch });
@@ -342,7 +342,7 @@ const getStockEntryById = async (req, res, next) => {
 const updateStockEntry = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { quantity, supplier_id, received_date, batch_number, manufacture_date, expiry_date, move_to_batch_id, product_id } = req.body;
+    const { quantity, supplier_id, received_date, batch_number, manufacture_date, expiry_date, move_to_batch_id, product_id, reference_number, party_name } = req.body;
 
     if (!quantity || Number(quantity) <= 0) {
       return res.status(400).json({ error: 'Quantity must be greater than 0' });
@@ -395,8 +395,8 @@ const updateStockEntry = async (req, res, next) => {
 
         // 3. Update stock movement to point to new batch
         await client.query(
-          'UPDATE stock_movements SET quantity = $1, supplier_id = $2, received_date = $3, batch_id = $4 WHERE id = $5',
-          [newQty, supplier_id || null, received_date || sm.received_date, move_to_batch_id, id]
+          'UPDATE stock_movements SET quantity = $1, supplier_id = $2, received_date = $3, batch_id = $4, reference_number = $5, party_name = $6 WHERE id = $7',
+          [newQty, supplier_id || null, received_date || sm.received_date, move_to_batch_id, reference_number || null, party_name || null, id]
         );
       } else {
         // Same batch — adjust quantities if changed
@@ -424,8 +424,8 @@ const updateStockEntry = async (req, res, next) => {
 
         // Update stock movement
         await client.query(
-          'UPDATE stock_movements SET quantity = $1, supplier_id = $2, received_date = $3 WHERE id = $4',
-          [newQty, supplier_id || null, received_date || sm.received_date, id]
+          'UPDATE stock_movements SET quantity = $1, supplier_id = $2, received_date = $3, reference_number = $4, party_name = $5 WHERE id = $6',
+          [newQty, supplier_id || null, received_date || sm.received_date, reference_number || null, party_name || null, id]
         );
       }
 
@@ -466,6 +466,7 @@ const getStockEntrySiblings = async (req, res, next) => {
     // Fetch all siblings
     const result = await pool.query(
       `SELECT sm.id, sm.quantity, sm.supplier_id, sm.voucher_number,
+              sm.reference_number, sm.party_name,
               COALESCE(sm.received_date, sm.created_at::date)::date AS received_date,
               sm.product_id, sm.batch_id,
               p.product_name, p.product_code, p.batch_tracking, p.image_url,
@@ -490,14 +491,19 @@ const getStockEntrySiblings = async (req, res, next) => {
 // GET /api/batches/stock-entry-groups — supplier+date grouped view
 const getStockEntryGroups = async (req, res, next) => {
   try {
-    const { supplier_id, from_date, to_date, page = 1, limit = 20 } = req.query;
+    const { supplier_id, product_id, from_date, to_date, page = 1, limit = 20 } = req.query;
 
-    const conditions = ["sm.movement_type = 'IN'"];
+    const conditions = ["sm.movement_type = 'IN'", "sm.supplier_id IS NOT NULL"];
     const params = [];
 
     if (supplier_id) {
       params.push(supplier_id);
       conditions.push(`sm.supplier_id = $${params.length}`);
+    }
+
+    if (product_id) {
+      params.push(product_id);
+      conditions.push(`sm.product_id = $${params.length}`);
     }
 
     const effectiveFromDate = from_date || to_date ? from_date : new Date().toISOString().split('T')[0];
@@ -535,7 +541,9 @@ const getStockEntryGroups = async (req, res, next) => {
              COUNT(*) AS item_count,
              SUM(sm.quantity) AS total_quantity,
              (array_agg(sm.id ORDER BY sm.created_at ASC))[1] AS first_entry_id,
-             (array_agg(sm.voucher_number ORDER BY sm.created_at ASC))[1] AS voucher_number
+             (array_agg(sm.voucher_number ORDER BY sm.created_at ASC))[1] AS voucher_number,
+             (array_agg(sm.reference_number ORDER BY sm.created_at ASC))[1] AS reference_number,
+             (array_agg(sm.party_name ORDER BY sm.created_at ASC))[1] AS party_name
       ${baseFrom}${whereClause}
       ${groupBy}
       ORDER BY COALESCE(sm.received_date, sm.created_at::date)::date DESC, c.customer_name ASC
@@ -559,6 +567,7 @@ const getStockEntriesByGroup = async (req, res, next) => {
 
     const result = await pool.query(
       `SELECT sm.id, sm.quantity, sm.supplier_id, sm.voucher_number,
+              sm.reference_number, sm.party_name,
               COALESCE(sm.received_date, sm.created_at::date)::date AS received_date,
               sm.product_id, sm.batch_id,
               p.product_name, p.product_code, p.batch_tracking, p.unit, p.qty_per_box, p.image_url,

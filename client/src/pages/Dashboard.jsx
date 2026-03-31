@@ -4,9 +4,9 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { fmtDate } from '../utils/date';
 
-const stockBadge = (qty) => {
-  if (qty < 50) return 'bg-red-100 text-red-700';
-  if (qty <= 200) return 'bg-yellow-100 text-yellow-700';
+const stockBadge = (qty, threshold = 50) => {
+  if (qty < threshold) return 'bg-red-100 text-red-700';
+  if (qty <= threshold * 4) return 'bg-yellow-100 text-yellow-700';
   return 'bg-green-100 text-green-700';
 };
 
@@ -40,8 +40,7 @@ export default function Dashboard() {
 
   const cards = [
     { label: 'Total Products', value: data.total_products, color: 'bg-blue-500', link: '/products' },
-    { label: 'Stock Value', value: formatINR(data.total_stock_value), color: 'bg-green-500', isText: true, link: '/stock-report' },
-    { label: 'Total Customers', value: data.total_customers, color: 'bg-purple-500', link: '/customers' },
+    { label: 'Total Material In', value: data.total_material_in || 0, color: 'bg-green-500', link: '/batches' },
     { label: 'Total Material Out', value: data.total_orders, color: 'bg-indigo-500', link: '/orders' },
     { label: 'Low Stock Alerts', value: data.low_stock_count, color: data.low_stock_count > 0 ? 'bg-red-500' : 'bg-gray-400', link: '/stock-report' },
   ];
@@ -167,12 +166,12 @@ export default function Dashboard() {
                     return p.product_name.toLowerCase().includes(t) || p.product_code.toLowerCase().includes(t);
                   })
                   .map((p) => (
-                    <tr key={p.product_id} className={`hover:bg-gray-50 ${p.total_stock < 50 ? 'bg-red-50' : ''}`}>
+                    <tr key={p.product_id} className={`hover:bg-gray-50 ${p.total_stock < (p.low_stock_threshold ?? 50) ? 'bg-red-50' : ''}`}>
                       <td className="px-5 py-3 text-sm font-medium text-gray-800">{p.product_name}</td>
                       <td className="px-5 py-3 text-sm text-gray-600">{p.product_code}</td>
                       <td className="px-5 py-3 text-sm text-gray-600">{p.unit}</td>
                       <td className="px-5 py-3">
-                        <span className={`inline-block px-2 py-0.5 rounded text-sm font-semibold ${stockBadge(p.total_stock)}`}>
+                        <span className={`inline-block px-2 py-0.5 rounded text-sm font-semibold ${stockBadge(p.total_stock, p.low_stock_threshold)}`}>
                           {p.total_stock}
                         </span>
                       </td>

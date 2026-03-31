@@ -15,6 +15,7 @@ const emptyItem = () => ({
   id: Date.now() + Math.random(),
   product_id: '',
   quantity: '',
+  qty_unit: 'default', // 'default' | 'boxes' | 'pieces'
   batches: [],
   allocations: [],
   useManualBatch: false,
@@ -51,6 +52,8 @@ export default function OrderForm() {
   const [products, setProducts] = useState([]);
   const [customerId, setCustomerId] = useState('');
   const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const [partyName, setPartyName] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [items, setItems] = useState([emptyItem()]);
   const [errors, setErrors] = useState({});
@@ -86,8 +89,13 @@ export default function OrderForm() {
       const order = res.data;
 
       setCustomerId(order.customer_id);
-      setOrderDate(order.order_date ? order.order_date.split('T')[0] : '');
+      if (order.order_date) {
+        const d = new Date(order.order_date);
+        setOrderDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+      }
       setInvoiceNumber(order.invoice_number);
+      setReferenceNumber(order.reference_number || '');
+      setPartyName(order.party_name || '');
 
       const allOldDeductions = [];
       for (const item of order.items) {
@@ -101,10 +109,22 @@ export default function OrderForm() {
 
       const formItems = [];
       for (const item of order.items) {
+        const prod = productsList.find((p) => p.id === item.product_id);
+        let displayQty = String(item.quantity);
+        let qtyUnit = 'default';
+        if (prod && prod.unit === 'Boxes' && prod.qty_per_box) {
+          if (item.quantity % prod.qty_per_box === 0) {
+            displayQty = String(item.quantity / prod.qty_per_box);
+            qtyUnit = 'boxes';
+          } else {
+            qtyUnit = 'pieces';
+          }
+        }
         const formItem = {
           id: Date.now() + Math.random(),
           product_id: item.product_id,
-          quantity: String(item.quantity),
+          quantity: displayQty,
+          qty_unit: qtyUnit,
           batches: [],
           allocations: [],
           useManualBatch: false,
@@ -120,22 +140,21 @@ export default function OrderForm() {
             return { ...b, quantity_remaining: b.quantity_remaining + oldQty };
           });
 
-          const namedBatches = adjusted.filter((b) => b.batch_number);
           formItem.batches = adjusted;
 
-          if (namedBatches.length > 0 && item.deductions && item.deductions.length > 0) {
+          if (adjusted.length > 0 && item.deductions && item.deductions.length > 0) {
             formItem.useManualBatch = true;
             formItem.allocations = item.deductions
-              .filter((d) => d.batch_number)
+              .filter((d) => d.batch_id)
               .map((d) => ({
                 id: Date.now() + Math.random(),
                 batch_id: d.batch_id,
                 quantity: String(d.quantity),
               }));
-            if (formItem.allocations.length === 0 && namedBatches.length > 0) {
+            if (formItem.allocations.length === 0) {
               formItem.allocations = [emptyAllocation()];
             }
-          } else if (namedBatches.length > 0) {
+          } else if (adjusted.length > 0) {
             formItem.useManualBatch = true;
             formItem.allocations = [emptyAllocation()];
           }
@@ -156,7 +175,9 @@ export default function OrderForm() {
     setItems((prev) =>
       prev.map((item) => {
         if (item.id !== itemId) return item;
-        return { ...item, product_id: productId, batches: [], allocations: [], useManualBatch: false };
+        const prod = products.find((p) => p.id === productId);
+        const qtyUnit = prod && prod.unit === 'Boxes' && prod.qty_per_box ? 'boxes' : 'default';
+        return { ...item, product_id: productId, qty_unit: qtyUnit, batches: [], allocations: [], useManualBatch: false };
       })
     );
 
@@ -176,18 +197,17 @@ export default function OrderForm() {
         });
       }
 
-      const namedBatches = available.filter((b) => b.batch_number);
-      const hasNamedBatches = namedBatches.length > 0;
+      const hasAnyBatches = available.length > 0;
       setItems((prev) =>
         prev.map((item) => {
           if (item.id !== itemId) return item;
-          const autoAlloc = hasNamedBatches && namedBatches.length === 1
-            ? [{ ...emptyAllocation(), batch_id: namedBatches[0].id }]
-            : hasNamedBatches ? [emptyAllocation()] : [];
+          const autoAlloc = hasAnyBatches && available.length === 1
+            ? [{ ...emptyAllocation(), batch_id: available[0].id }]
+            : hasAnyBatches ? [emptyAllocation()] : [];
           return {
             ...item,
             batches: available,
-            useManualBatch: hasNamedBatches,
+            useManualBatch: hasAnyBatches,
             allocations: autoAlloc,
           };
         })
@@ -371,7 +391,11 @@ export default function OrderForm() {
       if (!item.quantity || Number(item.quantity) <= 0) rowErrors.push('Enter quantity');
 
       if (item.useManualBatch && item.allocations.length > 0) {
-        const totalQty = Number(item.quantity) || 0;
+        const prod = products.find((p) => p.id === item.product_id);
+        const rawQty = Number(item.quantity) || 0;
+        const totalQty = (prod && prod.unit === 'Boxes' && prod.qty_per_box && (item.qty_unit === 'boxes' || item.qty_unit === 'default'))
+          ? rawQty * prod.qty_per_box
+          : rawQty;
         const allocTotal = getAllocatedTotal(item);
 
         item.allocations.forEach((alloc, i) => {
@@ -381,7 +405,8 @@ export default function OrderForm() {
             const adjusted = getAdjustedBatches(item, alloc.id);
             const batch = adjusted.find((b) => b.id === alloc.batch_id);
             if (batch && Number(alloc.quantity) > batch.adjusted_remaining) {
-              rowErrors.push(`Batch ${batch.batch_number}: only ${batch.adjusted_remaining} available`);
+              const batchLabel = batch.batch_number || `Batch (rcvd ${batch.received_date ? batch.received_date.slice(0, 10) : ''})`;
+              rowErrors.push(`${batchLabel}: only ${batch.adjusted_remaining} available`);
             }
           }
         });
@@ -406,6 +431,16 @@ export default function OrderForm() {
     try {
       const payload = [];
       for (const item of items) {
+        // Calculate actual qty in pieces
+        const prod = products.find((p) => p.id === item.product_id);
+        const getActualQty = (qty) => {
+          const n = Number(qty);
+          if (prod && prod.unit === 'Boxes' && prod.qty_per_box && (item.qty_unit === 'boxes' || item.qty_unit === 'default')) {
+            return n * prod.qty_per_box;
+          }
+          return n;
+        };
+
         if (item.useManualBatch && item.allocations.length > 0) {
           for (const alloc of item.allocations) {
             payload.push({
@@ -417,7 +452,7 @@ export default function OrderForm() {
         } else {
           payload.push({
             product_id: item.product_id,
-            quantity: Number(item.quantity),
+            quantity: getActualQty(item.quantity),
             batch_id: null,
           });
         }
@@ -426,6 +461,8 @@ export default function OrderForm() {
       const body = {
         customer_id: customerId,
         order_date: orderDate,
+        reference_number: referenceNumber || undefined,
+        party_name: partyName || undefined,
         items: payload,
       };
 
@@ -506,20 +543,26 @@ export default function OrderForm() {
               {errors.date && <p className="text-red-500 text-xs mt-1">{errors.date}</p>}
             </div>
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Reference Number</label>
+              <input type="text" value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)}
+                placeholder="Enter reference number"
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Party Name</label>
+              <input type="text" value={partyName} onChange={(e) => setPartyName(e.target.value)}
+                placeholder="Enter customer/party name"
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+            </div>
+          </div>
         </div>
 
         {/* Items */}
         <div className="bg-white rounded-lg shadow overflow-hidden mb-4">
-          <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+          <div className="px-5 py-3 border-b border-gray-200">
             <h3 className="text-sm font-semibold text-gray-700">Order Items</h3>
-            <button
-              type="button"
-              onClick={addItem}
-              tabIndex={-1}
-              className="text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1 rounded font-medium transition-colors"
-            >
-              + Add Item
-            </button>
           </div>
 
           <div className="divide-y divide-gray-100">
@@ -570,25 +613,54 @@ export default function OrderForm() {
                     </div>
                     <div className="sm:col-span-4">
                       <label className="block text-xs font-medium text-gray-500 mb-1">Quantity <span className="text-red-500">*</span></label>
-                      <input
-                        ref={(el) => (qtyRefs.current[item.id] = el)}
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) => updateItem(item.id, 'quantity', e.target.value)}
-                        onKeyDown={(e) => handleQtyKeyDown(e, item)}
-                        placeholder="0"
-                        className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500"
-                      />
+                      <div className="flex gap-1">
+                        <input
+                          ref={(el) => (qtyRefs.current[item.id] = el)}
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => updateItem(item.id, 'quantity', e.target.value)}
+                          onKeyDown={(e) => handleQtyKeyDown(e, item)}
+                          placeholder="0"
+                          className="flex-1 border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500"
+                        />
+                        {(() => {
+                          const prod = products.find((p) => p.id === item.product_id);
+                          if (prod && prod.unit === 'Boxes' && prod.qty_per_box) {
+                            return (
+                              <select
+                                value={item.qty_unit}
+                                onChange={(e) => updateItem(item.id, 'qty_unit', e.target.value)}
+                                className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500 bg-white"
+                              >
+                                <option value="boxes">Boxes</option>
+                                <option value="pieces">Pieces</option>
+                              </select>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
                       {(() => {
                         const prod = products.find((p) => p.id === item.product_id);
                         if (prod && prod.unit === 'Boxes' && prod.qty_per_box && item.quantity) {
-                          const total = Number(item.quantity) * prod.qty_per_box;
-                          return (
-                            <p className="text-xs text-blue-600 font-medium mt-1">
-                              {item.quantity} x {prod.qty_per_box} = {total} pcs
-                            </p>
-                          );
+                          const qty = Number(item.quantity);
+                          const ppb = prod.qty_per_box;
+                          if (item.qty_unit === 'boxes' || item.qty_unit === 'default') {
+                            return (
+                              <p className="text-xs text-blue-600 font-medium mt-1">
+                                {qty} Box x {ppb} = {qty * ppb} pcs
+                              </p>
+                            );
+                          } else {
+                            const boxes = Math.floor(qty / ppb);
+                            const remaining = qty % ppb;
+                            return (
+                              <p className="text-xs text-blue-600 font-medium mt-1">
+                                {boxes > 0 ? `${boxes} Box` : ''}{boxes > 0 && remaining > 0 ? ' + ' : ''}{remaining > 0 ? `${remaining} pcs` : ''}{boxes === 0 && remaining === 0 ? '0 pcs' : ''}
+                              </p>
+                            );
+                          }
                         }
                         return null;
                       })()}
@@ -601,17 +673,20 @@ export default function OrderForm() {
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-semibold text-gray-500">Batch Allocations</span>
                         <div className="flex items-center gap-3">
-                          {item.quantity && (
-                            <span className={`text-xs font-medium ${
-                              getAllocatedTotal(item) === Number(item.quantity)
-                                ? 'text-green-600'
-                                : getAllocatedTotal(item) > Number(item.quantity)
-                                ? 'text-red-600'
-                                : 'text-yellow-600'
-                            }`}>
-                              {getAllocatedTotal(item)} / {item.quantity} allocated
-                            </span>
-                          )}
+                          {item.quantity && (() => {
+                            const prod = products.find((p) => p.id === item.product_id);
+                            const rawQty = Number(item.quantity) || 0;
+                            const totalPcs = (prod && prod.unit === 'Boxes' && prod.qty_per_box && (item.qty_unit === 'boxes' || item.qty_unit === 'default'))
+                              ? rawQty * prod.qty_per_box : rawQty;
+                            const allocTotal = getAllocatedTotal(item);
+                            return (
+                              <span className={`text-xs font-medium ${
+                                allocTotal === totalPcs ? 'text-green-600' : allocTotal > totalPcs ? 'text-red-600' : 'text-yellow-600'
+                              }`}>
+                                {allocTotal} / {totalPcs} allocated
+                              </span>
+                            );
+                          })()}
                           <button
                             type="button"
                             onClick={() => addAllocation(item.id)}
@@ -625,7 +700,7 @@ export default function OrderForm() {
 
                       <div className="space-y-2">
                         {item.allocations.map((alloc, allocIdx) => {
-                          const adjusted = getAdjustedBatches(item, alloc.id).filter((b) => b.batch_number);
+                          const adjusted = getAdjustedBatches(item, alloc.id);
                           const available = adjusted.filter((b) => b.adjusted_remaining > 0 || b.id === alloc.batch_id);
                           const selectedBatch = adjusted.find((b) => b.id === alloc.batch_id);
 
@@ -635,7 +710,9 @@ export default function OrderForm() {
                                 <SearchableSelect
                                   options={available.map((b) => ({
                                     value: b.id,
-                                    label: `${b.batch_number} — Available: ${b.adjusted_remaining}`,
+                                    label: b.batch_number
+                                      ? `${b.batch_number} — Available: ${b.adjusted_remaining}`
+                                      : `No batch (Rcvd: ${b.received_date ? b.received_date.slice(0, 10) : '—'}) — Available: ${b.adjusted_remaining}`,
                                     sublabel: [
                                       b.manufacture_date ? `Mfg: ${fmtDate(b.manufacture_date)}` : '',
                                       b.expiry_date ? `Exp: ${fmtDate(b.expiry_date)}` : '',
@@ -688,6 +765,18 @@ export default function OrderForm() {
                 </div>
               );
             })}
+          </div>
+
+          {/* Add Item button at bottom */}
+          <div className="px-5 py-3 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={addItem}
+              tabIndex={-1}
+              className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              + Add Item
+            </button>
           </div>
         </div>
 

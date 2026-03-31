@@ -2,15 +2,18 @@ const pool = require('../config/db');
 
 const getStockMovements = async (req, res, next) => {
   try {
-    const { product_id, movement_type, from_date, to_date, search, page = 1, limit = 20 } = req.query;
+    const { product_id, movement_type, from_date, to_date, search, page = 1, limit = 30 } = req.query;
 
     const baseFrom = `
       FROM stock_movements sm
       JOIN products p ON p.id = sm.product_id
       LEFT JOIN inventory_batches ib ON ib.id = sm.batch_id
+      LEFT JOIN customers c_supplier ON c_supplier.id = sm.supplier_id
       LEFT JOIN orders o ON sm.reference_type = 'ORDER' AND o.id = sm.reference_id
+      LEFT JOIN customers c_order ON c_order.id = o.customer_id
     `;
-    const conditions = [];
+    // Filter out legacy IN movements without supplier
+    const conditions = ["NOT (sm.movement_type = 'IN' AND sm.supplier_id IS NULL)"];
     const params = [];
 
     if (product_id) {
@@ -26,38 +29,44 @@ const getStockMovements = async (req, res, next) => {
     if (search && search.trim()) {
       params.push(`%${search.trim()}%`);
       const idx = params.length;
-      conditions.push(`(p.product_name ILIKE $${idx} OR ib.batch_number ILIKE $${idx} OR o.invoice_number ILIKE $${idx} OR sm.movement_type ILIKE $${idx})`);
+      conditions.push(`(p.product_name ILIKE $${idx} OR p.product_code ILIKE $${idx} OR ib.batch_number ILIKE $${idx})`);
     }
 
-    // Default to today if no date filters provided
-    const effectiveFromDate = from_date || to_date ? from_date : new Date().toISOString().split('T')[0];
-    const effectiveToDate = from_date || to_date ? to_date : new Date().toISOString().split('T')[0];
-
-    if (effectiveFromDate) {
-      params.push(effectiveFromDate);
+    if (from_date) {
+      params.push(from_date);
       conditions.push(`sm.created_at >= $${params.length}::date`);
     }
 
-    if (effectiveToDate) {
-      params.push(effectiveToDate);
+    if (to_date) {
+      params.push(to_date);
       conditions.push(`sm.created_at < ($${params.length}::date + interval '1 day')`);
     }
 
     const whereClause = conditions.length > 0 ? ` WHERE ` + conditions.join(' AND ') : '';
 
-    // Get total count
-    const countResult = await pool.query(`SELECT COUNT(*) ${baseFrom}${whereClause}`, params);
-    const total = parseInt(countResult.rows[0].count, 10);
+    // Get total count + aggregated totals
+    const countResult = await pool.query(
+      `SELECT COUNT(*) AS count,
+              COALESCE(SUM(CASE WHEN sm.movement_type = 'IN' THEN sm.quantity ELSE 0 END), 0)::int AS total_in,
+              COALESCE(SUM(CASE WHEN sm.movement_type = 'OUT' THEN sm.quantity ELSE 0 END), 0)::int AS total_out
+       ${baseFrom}${whereClause}`,
+      params
+    );
+    const { count, total_in, total_out } = countResult.rows[0];
+    const total = parseInt(count, 10);
 
     // Get paginated data
     const offset = (Number(page) - 1) * Number(limit);
     params.push(Number(limit));
     params.push(offset);
-    const selectFields = `sm.*, p.product_name, ib.batch_number, CASE WHEN sm.reference_type = 'ORDER' THEN o.invoice_number ELSE NULL END AS invoice_number`;
+    const selectFields = `sm.*, p.product_name, p.product_code, ib.batch_number,
+      c_supplier.customer_name AS supplier_name,
+      CASE WHEN sm.reference_type = 'ORDER' THEN o.invoice_number ELSE NULL END AS invoice_number,
+      c_order.customer_name AS customer_name`;
     const dataQuery = `SELECT ${selectFields} ${baseFrom}${whereClause} ORDER BY sm.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
 
     const result = await pool.query(dataQuery, params);
-    res.json({ data: result.rows, total, page: Number(page), limit: Number(limit) });
+    res.json({ data: result.rows, total, total_in, total_out, page: Number(page), limit: Number(limit) });
   } catch (err) {
     next(err);
   }
@@ -124,7 +133,7 @@ const getLiveStockByProduct = async (req, res, next) => {
 
 const getStockReport = async (req, res, next) => {
   try {
-    const { product_id, low_stock_threshold } = req.query;
+    const { product_id, low_stock_threshold, low_stock } = req.query;
 
     let query = `
       SELECT
@@ -132,6 +141,7 @@ const getStockReport = async (req, res, next) => {
         p.product_name,
         p.product_code,
         p.unit,
+        p.low_stock_threshold,
         COALESCE(SUM(ib.quantity_remaining), 0)::int AS total_stock
       FROM products p
       LEFT JOIN inventory_batches ib ON ib.product_id = p.id
@@ -144,11 +154,13 @@ const getStockReport = async (req, res, next) => {
       query += ` AND p.id = $${params.length}`;
     }
 
-    query += ` GROUP BY p.id, p.product_name, p.product_code, p.unit`;
+    query += ` GROUP BY p.id, p.product_name, p.product_code, p.unit, p.low_stock_threshold`;
 
     if (low_stock_threshold) {
       params.push(Number(low_stock_threshold));
       query += ` HAVING COALESCE(SUM(ib.quantity_remaining), 0) < $${params.length}`;
+    } else if (low_stock) {
+      query += ` HAVING COALESCE(SUM(ib.quantity_remaining), 0) < COALESCE(p.low_stock_threshold, 50)`;
     }
 
     query += ` ORDER BY p.product_name ASC`;

@@ -7,6 +7,10 @@ import { fmtDate } from '../utils/date';
 import DateInput from '../components/DateInput';
 
 const today = () => new Date().toISOString().split('T')[0];
+const monthStart = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+};
 const toDateStr = (d) => d ? new Date(d).toISOString().split('T')[0] : '';
 
 export default function Batches() {
@@ -20,7 +24,7 @@ export default function Batches() {
   const [suppliers, setSuppliers] = useState([]);
   const [filterProductId, setFilterProductId] = useState('');
   const [filterSupplierId, setFilterSupplierId] = useState('');
-  const [fromDate, setFromDate] = useState(today());
+  const [fromDate, setFromDate] = useState(monthStart());
   const [toDate, setToDate] = useState(today());
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -41,6 +45,7 @@ export default function Batches() {
     setLoading(true);
     if (currentTab === 'entries') {
       const params = { page: pg, limit: 20 };
+      if (productId) params.product_id = productId;
       if (supplierId) params.supplier_id = supplierId;
       if (fd) params.from_date = fd;
       if (td) params.to_date = td;
@@ -171,17 +176,15 @@ export default function Batches() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4 items-end">
-        {tab === 'batches' && (
-          <div className="w-full sm:w-56">
-            <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
-            <SearchableSelect
-              options={products.map((p) => ({ value: p.id, label: p.product_name, sublabel: p.product_code }))}
-              value={filterProductId}
-              onChange={setFilterProductId}
-              placeholder="All Products"
-            />
-          </div>
-        )}
+        <div className="w-full sm:w-56">
+          <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
+          <SearchableSelect
+            options={products.map((p) => ({ value: p.id, label: p.product_name, sublabel: p.product_code }))}
+            value={filterProductId}
+            onChange={setFilterProductId}
+            placeholder="All Products"
+          />
+        </div>
         {tab === 'entries' && (
           <div className="w-full sm:w-56">
             <label className="block text-xs font-medium text-gray-500 mb-1">Supplier</label>
@@ -238,7 +241,10 @@ export default function Batches() {
                 onClick={() => { setSelectedIndex(idx); navigate(`/batches/view?supplier=${g.supplier_id}&date=${toDateStr(g.received_date)}`); }}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-gray-900">{g.supplier_name}</span>
+                  <div>
+                    <span className="font-medium text-gray-900">{g.supplier_name}</span>
+                    {g.party_name && <span className="text-xs text-gray-400 ml-1">({g.party_name})</span>}
+                  </div>
                   <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-semibold">
                     +{g.total_quantity}
                   </span>
@@ -247,6 +253,7 @@ export default function Batches() {
                   <div className="text-sm text-gray-500">
                     <span className="text-gray-400">Voucher:</span>{' '}
                     <span className="font-medium text-gray-700">{g.voucher_number}</span>
+                    {g.reference_number && <span className="text-xs text-gray-400 ml-1">({g.reference_number})</span>}
                   </div>
                 )}
                 <div className="text-sm text-gray-500">
@@ -295,12 +302,16 @@ export default function Batches() {
                     onClick={() => { setSelectedIndex(idx); navigate(`/batches/view?supplier=${g.supplier_id}&date=${toDateStr(g.received_date)}`); }}
                   >
                     <td className="px-5 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">
-                      {g.voucher_number || '\u2014'}
+                      <div>{g.voucher_number || '\u2014'}</div>
+                      {g.reference_number && <div className="text-xs text-gray-400">{g.reference_number}</div>}
                     </td>
                     <td className="px-5 py-3 text-sm text-gray-700 whitespace-nowrap">
                       {fmtDate(g.received_date)}
                     </td>
-                    <td className="px-5 py-3 text-sm font-medium text-gray-800">{g.supplier_name}</td>
+                    <td className="px-5 py-3 text-sm">
+                      <div className="font-medium text-gray-800">{g.supplier_name}</div>
+                      {g.party_name && <div className="text-xs text-gray-400">{g.party_name}</div>}
+                    </td>
                     <td className="px-5 py-3 text-sm">
                       <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
                         {g.item_count} products
