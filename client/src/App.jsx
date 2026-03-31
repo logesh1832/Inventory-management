@@ -25,6 +25,7 @@ import UserManagement from './pages/UserManagement';
 import RoleManagement from './pages/RoleManagement';
 import UnitManagement from './pages/UnitManagement';
 import Organizations from './pages/Organizations';
+import Customization from './pages/Customization';
 
 // Guard: super admin only
 function SuperAdminRoute({ children }) {
@@ -81,6 +82,7 @@ function App() {
               <Route path="/users" element={<OrgRoute><UserManagement /></OrgRoute>} />
               <Route path="/roles" element={<OrgRoute><RoleManagement /></OrgRoute>} />
               <Route path="/units" element={<OrgRoute><UnitManagement /></OrgRoute>} />
+              <Route path="/customization" element={<OrgRoute><Customization /></OrgRoute>} />
             </Route>
           </Route>
         </Routes>

@@ -17,6 +17,7 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const roleRoutes = require('./routes/roleRoutes');
 const unitRoutes = require('./routes/unitRoutes');
 const orgRoutes = require('./routes/orgRoutes');
+const orgCustomizationRoutes = require('./routes/orgCustomizationRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -46,6 +47,7 @@ app.use('/api/roles', roleRoutes);
 app.use('/api/units', authenticate, unitRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/orgs', orgRoutes);
+app.use('/api/org/customization', orgCustomizationRoutes);
 
 // Error handler (must be last)
 app.use(errorHandler);

@@ -433,3 +433,31 @@ BEGIN
         END IF;
     END IF;
 END $$;
+
+-- ============================================
+-- Migration: Story 8 — Org Customization columns
+-- ============================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'organizations' AND column_name = 'sidebar_color') THEN
+        ALTER TABLE organizations ADD COLUMN sidebar_color VARCHAR(20) DEFAULT '#2057A5';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'organizations' AND column_name = 'accent_color') THEN
+        ALTER TABLE organizations ADD COLUMN accent_color VARCHAR(20) DEFAULT '#EAB308';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'organizations' AND column_name = 'sidebar_logo_url') THEN
+        ALTER TABLE organizations ADD COLUMN sidebar_logo_url TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'organizations' AND column_name = 'favicon_url') THEN
+        ALTER TABLE organizations ADD COLUMN favicon_url TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'organizations' AND column_name = 'display_name') THEN
+        ALTER TABLE organizations ADD COLUMN display_name VARCHAR(255);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'organizations' AND column_name = 'sidebar_tagline') THEN
+        ALTER TABLE organizations ADD COLUMN sidebar_tagline VARCHAR(255);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'organizations' AND column_name = 'sidebar_icon_url') THEN
+        ALTER TABLE organizations ADD COLUMN sidebar_icon_url TEXT;
+    END IF;
+END $$;

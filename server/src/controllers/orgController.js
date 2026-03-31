@@ -4,7 +4,7 @@ const pool = require('../config/db');
 const DEFAULT_ADMIN_CAPABILITIES = [
   'dashboard', 'products', 'categories', 'customers',
   'material_in', 'movements', 'material_out', 'reports',
-  'user_management', 'role_management', 'unit_management',
+  'user_management', 'role_management', 'unit_management', 'customization',
 ];
 const DEFAULT_INVENTORY_CAPABILITIES = [
   'dashboard', 'products', 'categories', 'material_in', 'movements', 'material_out', 'reports',
