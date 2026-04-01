@@ -27,6 +27,7 @@ export default function Batches() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -41,10 +42,10 @@ export default function Batches() {
     api.get('/customers').then((res) => setSuppliers(res.data)).catch(() => {});
   }, []);
 
-  const fetchData = (currentTab, productId, supplierId, fd, td, pg) => {
+  const fetchData = (currentTab, productId, supplierId, fd, td, pg, lim) => {
     setLoading(true);
     if (currentTab === 'entries') {
-      const params = { page: pg, limit: 20 };
+      const params = { page: pg, limit: lim };
       if (productId) params.product_id = productId;
       if (supplierId) params.supplier_id = supplierId;
       if (fd) params.from_date = fd;
@@ -54,7 +55,7 @@ export default function Batches() {
         .catch(() => {})
         .finally(() => setLoading(false));
     } else {
-      const params = { page: pg, limit: 20 };
+      const params = { page: pg, limit: lim };
       if (productId) params.product_id = productId;
       if (fd) params.from_date = fd;
       if (td) params.to_date = td;
@@ -67,13 +68,19 @@ export default function Batches() {
 
   useEffect(() => {
     setPage(1);
-    fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, 1);
+    fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, 1, limit);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, filterProductId, filterSupplierId, fromDate, toDate]);
 
   const handlePageChange = (pg) => {
     setPage(pg);
-    fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, pg);
+    fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, pg, limit);
+  };
+
+  const handleLimitChange = (newLimit) => {
+    setLimit(newLimit);
+    setPage(1);
+    fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, 1, newLimit);
   };
 
   // Reset selectedIndex when entries data changes
@@ -344,7 +351,7 @@ export default function Batches() {
             </table>
           </div>
 
-          <Pagination page={page} total={entriesTotal} limit={20} onPageChange={handlePageChange} />
+          <Pagination page={page} total={entriesTotal} limit={limit} onPageChange={handlePageChange} onLimitChange={handleLimitChange} />
           </>
         )
       ) : (
@@ -418,7 +425,7 @@ export default function Batches() {
             </table>
           </div>
 
-          <Pagination page={page} total={batchesTotal} limit={20} onPageChange={handlePageChange} />
+          <Pagination page={page} total={batchesTotal} limit={limit} onPageChange={handlePageChange} onLimitChange={handleLimitChange} />
           </>
         )
       )}

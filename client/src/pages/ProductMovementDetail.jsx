@@ -75,7 +75,7 @@ export default function ProductMovementDetail() {
     const boxPart = boxes > 0 || remaining === 0 ? `${boxes} ${unit}` : '';
     const pcsPart = remaining > 0 ? `${remaining} ${subUnit}` : '';
     const display = [boxPart, pcsPart].filter(Boolean).join(' + ');
-    return `${display} (${qty} ${subUnit})`;
+    return display;
   };
   const fmtOut = (qty) => {
     if (!subUnit || !qtyPerBox) return `${qty} ${unit || ''}`.trim();
@@ -138,11 +138,11 @@ export default function ProductMovementDetail() {
         <div className="flex flex-wrap gap-4">
           <div className="bg-green-50 rounded-lg px-4 py-3 min-w-[120px]">
             <p className="text-xs text-green-600 font-medium">Total In</p>
-            <p className="text-xl font-bold text-green-800">+{fmtIn(totalIn)}</p>
+            <p className="text-xl font-bold text-green-800">{fmtIn(totalIn)}</p>
           </div>
           <div className="bg-red-50 rounded-lg px-4 py-3 min-w-[120px]">
             <p className="text-xs text-red-600 font-medium">Total Out</p>
-            <p className="text-xl font-bold text-red-800">-{fmtOut(totalOut)}</p>
+            <p className="text-xl font-bold text-red-800">{fmtOut(totalOut)}</p>
           </div>
           <div className="bg-blue-50 rounded-lg px-4 py-3 min-w-[120px]">
             <p className="text-xs text-blue-600 font-medium">Total Movements</p>
@@ -201,7 +201,7 @@ export default function ProductMovementDetail() {
                       m.movement_type === 'IN' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                     }`}
                   >
-                    {m.movement_type === 'IN' ? '+' : '-'}{m.movement_type === 'IN' ? fmtIn(m.quantity) : fmtOut(m.quantity)}
+                    {m.movement_type === 'IN' ? fmtIn(m.quantity) : fmtOut(m.quantity)}
                   </span>
                 </div>
                 <div className="text-sm text-gray-500">
@@ -269,7 +269,7 @@ export default function ProductMovementDetail() {
                     </td>
                     <td className="px-5 py-3 text-sm font-medium">
                       <span className={m.movement_type === 'IN' ? 'text-green-700' : 'text-red-700'}>
-                        {m.movement_type === 'IN' ? '+' : '-'}{m.movement_type === 'IN' ? fmtIn(m.quantity) : fmtOut(m.quantity)}
+                        {m.movement_type === 'IN' ? fmtIn(m.quantity) : fmtOut(m.quantity)}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-sm text-gray-600">{m.batch_number || '\u2014'}</td>

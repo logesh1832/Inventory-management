@@ -26,6 +26,7 @@ export default function Orders() {
     to_date: '',
   });
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -35,10 +36,10 @@ export default function Orders() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const fetchOrders = async (params, pg) => {
+  const fetchOrders = async (params, pg, lim) => {
     try {
       setLoading(true);
-      const cleanParams = { page: pg, limit: 20 };
+      const cleanParams = { page: pg, limit: lim };
       Object.entries(params).forEach(([k, v]) => {
         if (v) cleanParams[k] = v;
       });
@@ -55,19 +56,25 @@ export default function Orders() {
   useEffect(() => {
     api.get('/customers').then((res) => setCustomers(res.data)).catch(() => {});
     api.get('/products').then((res) => setProducts(res.data)).catch(() => {});
-    fetchOrders(filters, 1);
+    fetchOrders(filters, 1, limit);
   }, []);
 
   const handleFilterChange = (e) => {
     const updated = { ...filters, [e.target.name]: e.target.value };
     setFilters(updated);
     setPage(1);
-    fetchOrders(updated, 1);
+    fetchOrders(updated, 1, limit);
   };
 
   const handlePageChange = (pg) => {
     setPage(pg);
-    fetchOrders(filters, pg);
+    fetchOrders(filters, pg, limit);
+  };
+
+  const handleLimitChange = (newLimit) => {
+    setLimit(newLimit);
+    setPage(1);
+    fetchOrders(filters, 1, newLimit);
   };
 
   const handleDeleteOrder = async (orderId, invoiceNumber) => {
@@ -338,7 +345,7 @@ export default function Orders() {
           </table>
         </div>
 
-        <Pagination page={page} total={total} limit={20} onPageChange={handlePageChange} />
+        <Pagination page={page} total={total} limit={limit} onPageChange={handlePageChange} onLimitChange={handleLimitChange} />
         </>
       )}
     </div>
