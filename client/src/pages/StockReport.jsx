@@ -121,16 +121,16 @@ export default function StockReport() {
           </div>
 
           {/* Desktop table */}
-          <div className="hidden md:block bg-white rounded shadow overflow-hidden">
+          <div className="hidden md:block bg-white rounded shadow overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Stock</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Threshold</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"></th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Stock</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Threshold</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -140,10 +140,9 @@ export default function StockReport() {
                     onClick={() => navigate(`/product-report/${p.product_id}`)}
                     className="cursor-pointer hover:bg-gray-50"
                   >
-                    <td className="px-6 py-4 whitespace-nowrap font-medium">{p.product_name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{p.product_code}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{p.unit}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 font-medium text-sm text-gray-800">{p.product_name}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{p.product_code}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`inline-block px-2 py-1 rounded text-sm font-semibold ${stockBadge(primaryStock(p), p.low_stock_threshold)}`}>
                         {primaryStock(p)} {p.unit}
                         {p.sub_unit && p.qty_per_box && p.total_stock % p.qty_per_box > 0 && (
@@ -154,10 +153,11 @@ export default function StockReport() {
                         <p className="text-xs text-gray-400 mt-0.5">{p.total_stock} {p.sub_unit}</p>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{p.unit}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                       {p.low_stock_threshold ?? 50}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-blue-500 font-medium">
                       View Details
                     </td>
                   </tr>

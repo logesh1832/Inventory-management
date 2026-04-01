@@ -396,6 +396,7 @@ const getProductMovements = async (req, res, next) => {
         p.unit, p.sub_unit, p.qty_per_box,
         c_supplier.customer_name AS supplier_name,
         o.invoice_number,
+        o.reference_number AS order_reference,
         c_order.customer_name AS customer_name
       ${baseFrom}${whereClause}
       ORDER BY sm.created_at DESC

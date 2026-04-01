@@ -213,16 +213,28 @@ export default function ProductMovementDetail() {
                   </span>{' '}
                   {m.supplier_name || m.customer_name || '\u2014'}
                 </div>
-                {m.reference_type === 'ORDER' && m.reference_id && (
-                  <div>
+                <div className="text-sm">
+                  {m.reference_type === 'ORDER' && m.reference_id ? (
                     <button
                       onClick={() => navigate(`/orders/${m.reference_id}`)}
                       className="text-blue-600 hover:text-blue-800 hover:underline text-xs font-medium"
                     >
                       {m.invoice_number || `Order #${m.reference_id}`}
                     </button>
-                  </div>
-                )}
+                  ) : m.voucher_number ? (
+                    <button
+                      onClick={() => navigate(`/batches/view?voucher=${m.voucher_number}`)}
+                      className="text-blue-600 hover:text-blue-800 hover:underline text-xs font-medium"
+                    >
+                      {m.voucher_number}
+                    </button>
+                  ) : null}
+                  {(m.reference_number || m.order_reference) && (
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      Ref: {m.reference_number || m.order_reference}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -270,8 +282,20 @@ export default function ProductMovementDetail() {
                         >
                           {m.invoice_number || `Order #${m.reference_id}`}
                         </button>
+                      ) : m.voucher_number ? (
+                        <button
+                          onClick={() => navigate(`/batches/view?voucher=${m.voucher_number}`)}
+                          className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                        >
+                          {m.voucher_number}
+                        </button>
                       ) : (
-                        <span className="text-gray-400">{m.reference_type || '\u2014'}</span>
+                        <span className="text-gray-400">{'\u2014'}</span>
+                      )}
+                      {(m.reference_number || m.order_reference) && (
+                        <div className="text-xs text-gray-400 mt-0.5">
+                          Ref: {m.reference_number || m.order_reference}
+                        </div>
                       )}
                     </td>
                   </tr>
