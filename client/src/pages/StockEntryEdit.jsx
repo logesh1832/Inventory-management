@@ -68,6 +68,7 @@ export default function StockEntryEdit() {
   const [receivedDate, setReceivedDate] = useState('');
   const [referenceNumber, setReferenceNumber] = useState('');
   const [partyName, setPartyName] = useState('');
+  const [voucherNumber, setVoucherNumber] = useState('');
 
   // Rows: existing entries have a UUID id, new ones have "new-..." prefix
   const [rows, setRows] = useState([]);
@@ -104,6 +105,7 @@ export default function StockEntryEdit() {
       setReceivedDate(toDateStr(entries[0].received_date));
       setReferenceNumber(entries[0].reference_number || '');
       setPartyName(entries[0].party_name || '');
+      setVoucherNumber(entries[0].voucher_number || '');
 
       const rowsData = [];
       for (const e of entries) {
@@ -331,6 +333,7 @@ export default function StockEntryEdit() {
           received_date: receivedDate,
           reference_number: referenceNumber || undefined,
           party_name: partyName || undefined,
+          voucher_number: voucherNumber || undefined,
           items,
         });
       }
@@ -584,7 +587,22 @@ export default function StockEntryEdit() {
                           return (
                             <select
                               value={row.qty_unit || 'boxes'}
-                              onChange={(e) => updateRow(row.id, 'qty_unit', e.target.value)}
+                              onChange={(e) => {
+                                const newUnit = e.target.value;
+                                const oldUnit = row.qty_unit || 'boxes';
+                                const ppb = prod.qty_per_box;
+                                const qty = Number(row.quantity) || 0;
+                                let convertedQty = row.quantity;
+                                if (newUnit !== oldUnit) {
+                                  if (oldUnit === 'boxes' && newUnit === 'pieces') {
+                                    convertedQty = String(qty * ppb);
+                                  } else if (oldUnit === 'pieces' && newUnit === 'boxes') {
+                                    convertedQty = String(Math.floor(qty / ppb));
+                                  }
+                                }
+                                updateRow(row.id, 'qty_unit', newUnit);
+                                updateRow(row.id, 'quantity', convertedQty);
+                              }}
                               className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500 bg-white"
                             >
                               <option value="boxes">{prod.unit}</option>

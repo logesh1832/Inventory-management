@@ -71,7 +71,7 @@ const createBatch = async (req, res, next) => {
 // POST /api/batches/bulk — create/update multiple batch items at once
 const createBulkBatches = async (req, res, next) => {
   try {
-    const { supplier_id, received_date, items, reference_number, party_name } = req.body;
+    const { supplier_id, received_date, items, reference_number, party_name, voucher_number: existingVoucherNumber } = req.body;
 
     if (!supplier_id) {
       return res.status(400).json({ error: 'Supplier is required' });
@@ -99,8 +99,8 @@ const createBulkBatches = async (req, res, next) => {
     try {
       await client.query('BEGIN');
 
-      // Generate one voucher number for the entire group
-      const voucherNumber = await generateVoucherNumber(client);
+      // Use existing voucher_number if provided (appending to an existing MI), otherwise generate new
+      const voucherNumber = existingVoucherNumber || await generateVoucherNumber(client);
 
       for (const item of items) {
         const qty = Number(item.quantity);

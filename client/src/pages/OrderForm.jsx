@@ -149,7 +149,10 @@ export default function OrderForm() {
               .map((d) => ({
                 id: Date.now() + Math.random(),
                 batch_id: d.batch_id,
-                quantity: String(d.quantity),
+                // d.quantity is stored in PCS; convert back to display unit
+                quantity: (prod && prod.sub_unit && prod.qty_per_box && qtyUnit === 'boxes')
+                  ? String(d.quantity / prod.qty_per_box)
+                  : String(d.quantity),
               }));
             if (formItem.allocations.length === 0) {
               formItem.allocations = [emptyAllocation()];
