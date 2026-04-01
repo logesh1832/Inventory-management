@@ -197,16 +197,12 @@ const getAllOrders = async (req, res, next) => {
       conditions.push(`o.status = $${params.length}`);
     }
 
-    // Default to today if no date filters provided
-    const effectiveFromDate = from_date || to_date ? from_date : new Date().toISOString().split('T')[0];
-    const effectiveToDate = from_date || to_date ? to_date : new Date().toISOString().split('T')[0];
-
-    if (effectiveFromDate) {
-      params.push(effectiveFromDate);
+    if (from_date) {
+      params.push(from_date);
       conditions.push(`o.order_date >= $${params.length}`);
     }
-    if (effectiveToDate) {
-      params.push(effectiveToDate);
+    if (to_date) {
+      params.push(to_date);
       conditions.push(`o.order_date <= $${params.length}`);
     }
 

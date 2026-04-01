@@ -133,7 +133,7 @@ const getLiveStockByProduct = async (req, res, next) => {
 
 const getStockReport = async (req, res, next) => {
   try {
-    const { product_id, low_stock_threshold, low_stock } = req.query;
+    const { product_id, low_stock_threshold, low_stock, category } = req.query;
 
     let query = `
       SELECT
@@ -144,6 +144,7 @@ const getStockReport = async (req, res, next) => {
         p.sub_unit,
         p.qty_per_box,
         p.low_stock_threshold,
+        p.category,
         COALESCE(SUM(ib.quantity_remaining), 0)::int AS total_stock
       FROM products p
       LEFT JOIN inventory_batches ib ON ib.product_id = p.id
@@ -156,7 +157,12 @@ const getStockReport = async (req, res, next) => {
       query += ` AND p.id = $${params.length}`;
     }
 
-    query += ` GROUP BY p.id, p.product_name, p.product_code, p.unit, p.sub_unit, p.qty_per_box, p.low_stock_threshold`;
+    if (category) {
+      params.push(category);
+      query += ` AND p.category = $${params.length}`;
+    }
+
+    query += ` GROUP BY p.id, p.product_name, p.product_code, p.unit, p.sub_unit, p.qty_per_box, p.low_stock_threshold, p.category`;
 
     if (low_stock_threshold) {
       params.push(Number(low_stock_threshold));

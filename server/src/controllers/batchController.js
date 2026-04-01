@@ -186,16 +186,12 @@ const getAllBatches = async (req, res, next) => {
       conditions.push(`b.product_id = $${params.length}`);
     }
 
-    // Default to today if no date filters provided
-    const effectiveFromDate = from_date || to_date ? from_date : new Date().toISOString().split('T')[0];
-    const effectiveToDate = from_date || to_date ? to_date : new Date().toISOString().split('T')[0];
-
-    if (effectiveFromDate) {
-      params.push(effectiveFromDate);
+    if (from_date) {
+      params.push(from_date);
       conditions.push(`b.received_date >= $${params.length}`);
     }
-    if (effectiveToDate) {
-      params.push(effectiveToDate);
+    if (to_date) {
+      params.push(to_date);
       conditions.push(`b.received_date <= $${params.length}`);
     }
 
@@ -239,16 +235,12 @@ const getStockEntries = async (req, res, next) => {
       conditions.push(`sm.supplier_id = $${params.length}`);
     }
 
-    // Default to today if no date filters provided
-    const effectiveFromDate = from_date || to_date ? from_date : new Date().toISOString().split('T')[0];
-    const effectiveToDate = from_date || to_date ? to_date : new Date().toISOString().split('T')[0];
-
-    if (effectiveFromDate) {
-      params.push(effectiveFromDate);
+    if (from_date) {
+      params.push(from_date);
       conditions.push(`sm.created_at >= $${params.length}::date`);
     }
-    if (effectiveToDate) {
-      params.push(effectiveToDate);
+    if (to_date) {
+      params.push(to_date);
       conditions.push(`sm.created_at < ($${params.length}::date + interval '1 day')`);
     }
 
@@ -505,15 +497,12 @@ const getStockEntryGroups = async (req, res, next) => {
       conditions.push(`sm.product_id = $${params.length}`);
     }
 
-    const effectiveFromDate = from_date || to_date ? from_date : new Date().toISOString().split('T')[0];
-    const effectiveToDate = from_date || to_date ? to_date : new Date().toISOString().split('T')[0];
-
-    if (effectiveFromDate) {
-      params.push(effectiveFromDate);
+    if (from_date) {
+      params.push(from_date);
       conditions.push(`COALESCE(sm.received_date, sm.created_at::date)::date >= $${params.length}::date`);
     }
-    if (effectiveToDate) {
-      params.push(effectiveToDate);
+    if (to_date) {
+      params.push(to_date);
       conditions.push(`COALESCE(sm.received_date, sm.created_at::date)::date <= $${params.length}::date`);
     }
 

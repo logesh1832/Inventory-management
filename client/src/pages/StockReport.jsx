@@ -16,15 +16,18 @@ const primaryStock = (p) => {
 export default function StockReport() {
   const navigate = useNavigate();
   const [stock, setStock] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const fetchStock = async (lowStock) => {
+  const fetchStock = async (lowStock, category) => {
     try {
       setLoading(true);
       const params = {};
       if (lowStock) params.low_stock = true;
+      if (category) params.category = category;
       const res = await api.get('/inventory/stock-report', { params });
       setStock(res.data);
     } catch {
@@ -35,13 +38,19 @@ export default function StockReport() {
   };
 
   useEffect(() => {
-    fetchStock(false);
+    fetchStock(false, '');
+    api.get('/categories').then((res) => setCategories(res.data)).catch(() => {});
   }, []);
 
   const handleLowStockToggle = () => {
     const next = !lowStockOnly;
     setLowStockOnly(next);
-    fetchStock(next);
+    fetchStock(next, selectedCategory);
+  };
+
+  const handleCategoryChange = (e) => {
+    setSelectedCategory(e.target.value);
+    fetchStock(lowStockOnly, e.target.value);
   };
 
   const term = searchTerm.toLowerCase().trim();
@@ -65,7 +74,7 @@ export default function StockReport() {
       </div>
 
 
-      {/* Search */}
+      {/* Search & Filters */}
       <div className="flex flex-wrap gap-3 items-end">
         <div className="w-full sm:w-72">
           <label className="block text-xs font-medium text-gray-500 mb-1">Search Product</label>
@@ -76,6 +85,19 @@ export default function StockReport() {
             placeholder="Search by name or code..."
             className="border border-gray-300 rounded px-3 py-2 w-full text-sm"
           />
+        </div>
+        <div className="w-full sm:w-52">
+          <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
+          <select
+            value={selectedCategory}
+            onChange={handleCategoryChange}
+            className="border border-gray-300 rounded px-3 py-2 w-full text-sm"
+          >
+            <option value="">All Categories</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.name}>{c.name}</option>
+            ))}
+          </select>
         </div>
       </div>
 
