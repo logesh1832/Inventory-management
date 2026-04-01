@@ -46,17 +46,16 @@ export default function OrderDetail() {
   if (loading) return <p className="text-gray-500">Loading...</p>;
   if (!order) return <p className="text-gray-500">Order not found.</p>;
 
-  const formatQty = (item) => {
-    const qty = item.quantity;
-    const unit = item.unit || '';
-    const subUnit = item.sub_unit;
-    const qtyPerBox = item.qty_per_box;
-
+  // qty is stored in PCS (sub-unit) for products with sub_unit
+  const formatQty = (qty, unit, subUnit, qtyPerBox) => {
     if (subUnit && qtyPerBox) {
-      const boxes = qty / qtyPerBox;
-      return <span>{boxes} {unit} ({qty} {subUnit})</span>;
+      if (qty < qtyPerBox) return <span>{qty} {subUnit}</span>;
+      const boxes = Math.floor(qty / qtyPerBox);
+      const remaining = qty % qtyPerBox;
+      if (remaining === 0) return <span>{boxes} {unit}</span>;
+      return <span>{boxes} {unit} + {remaining} {subUnit}</span>;
     }
-    return <span>{qty} {unit}</span>;
+    return <span>{qty} {unit || ''}</span>;
   };
 
   return (
@@ -149,7 +148,7 @@ export default function OrderDetail() {
                     </td>
                     <td className="py-1 px-2 text-[10px] text-gray-600 align-top border border-gray-300">{batchList}</td>
                     <td className="py-1 px-2 text-xs text-right align-top border border-gray-300">
-                      {formatQty(item)}
+                      {formatQty(item.quantity, item.unit, item.sub_unit, item.qty_per_box)}
                     </td>
                   </tr>
                 );
@@ -180,13 +179,14 @@ export default function OrderDetail() {
               {order.items.map((item) => (
                 <tr key={item.id}>
                   <td className="px-4 py-2 text-sm font-medium text-gray-800">{item.product_name}</td>
-                  <td className="px-4 py-2 text-sm">{item.quantity}</td>
+                  <td className="px-4 py-2 text-sm">{formatQty(item.quantity, item.unit, item.sub_unit, item.qty_per_box)}</td>
                   <td className="px-4 py-2 text-sm">
                     {item.deductions && item.deductions.length > 0 ? (
                       <div className="space-y-0.5">
                         {item.deductions.map((d, i) => (
                           <div key={i} className="text-xs text-gray-600">
-                            {d.batch_number ? `${d.batch_number}: ${d.quantity}` : `Stock: ${d.quantity}`}
+                            {d.batch_number ? `${d.batch_number}: ` : 'Stock: '}
+                            {formatQty(d.quantity, item.unit, item.sub_unit, item.qty_per_box)}
                           </div>
                         ))}
                       </div>

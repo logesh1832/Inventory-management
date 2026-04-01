@@ -5,6 +5,18 @@ import { fmtDate } from '../utils/date';
 
 const toISO = (d) => d.toISOString().split('T')[0];
 
+// Both IN and OUT quantities are stored in PCS (sub-unit) for products with sub_unit.
+// Converts PCS → "X Box + Y PCS" display.
+const formatQtyPCS = (qty, unit, subUnit, qtyPerBox) => {
+  if (!subUnit || !qtyPerBox || qtyPerBox <= 0) return { text: `${qty}`, unit: unit || '' };
+  const boxes = Math.floor(qty / qtyPerBox);
+  const remaining = qty % qtyPerBox;
+  if (boxes === 0) return { text: `${remaining}`, unit: subUnit };
+  if (remaining === 0) return { text: `${boxes}`, unit };
+  return { text: `${boxes} ${unit} + ${remaining}`, unit: subUnit };
+};
+const formatOutQty = formatQtyPCS;
+
 // Financial year starts April 1
 const getFYStart = () => {
   const now = new Date();
@@ -44,7 +56,11 @@ const groupByProduct = (data) => {
   const map = {};
   data.forEach((m) => {
     const key = m.product_id;
-    if (!map[key]) map[key] = { label: m.product_name, sublabel: m.product_code, sortKey: m.product_name, inQty: 0, outQty: 0 };
+    if (!map[key]) map[key] = {
+      label: m.product_name, sublabel: m.product_code, sortKey: m.product_name,
+      inQty: 0, outQty: 0,
+      unit: m.unit, sub_unit: m.sub_unit, qty_per_box: m.qty_per_box,
+    };
     if (m.movement_type === 'IN') map[key].inQty += m.quantity;
     else map[key].outQty += m.quantity;
   });
@@ -176,6 +192,11 @@ export default function StockMovements() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterProductId, tab, period]);
 
+  // Selected product info (for unit labels in single-product view)
+  const selectedProduct = filterProductId ? products.find((p) => p.id === filterProductId) : null;
+  const inUnit = selectedProduct?.unit || '';
+  const outUnit = selectedProduct?.sub_unit || selectedProduct?.unit || '';
+
   // Group data based on period
   let grouped = [];
   if (!filterProductId) {
@@ -248,20 +269,45 @@ export default function StockMovements() {
       </div>
 
       {/* Summary cards */}
-      <div className="flex flex-wrap gap-3 mb-4">
-        <div className="bg-green-50 rounded-lg shadow px-4 py-3 min-w-[100px]">
-          <p className="text-xs text-green-600">Total In</p>
-          <p className="text-xl font-bold text-green-800">{totalIn}</p>
-        </div>
-        <div className="bg-red-50 rounded-lg shadow px-4 py-3 min-w-[100px]">
-          <p className="text-xs text-red-600">Total Out</p>
-          <p className="text-xl font-bold text-red-800">{totalOut}</p>
-        </div>
-        <div className="bg-blue-50 rounded-lg shadow px-4 py-3 min-w-[100px]">
-          <p className="text-xs text-blue-600">Balance</p>
-          <p className="text-xl font-bold text-blue-800">{totalIn - totalOut}</p>
-        </div>
-      </div>
+      {(() => {
+        const outFmt = selectedProduct
+          ? formatOutQty(totalOut, selectedProduct.unit, selectedProduct.sub_unit, selectedProduct.qty_per_box)
+          : { text: `${totalOut}`, unit: outUnit };
+        return (
+          <div className="flex flex-wrap gap-3 mb-4">
+            <div className="bg-green-50 rounded-lg shadow px-4 py-3 min-w-[100px]">
+              <p className="text-xs text-green-600">Total In</p>
+              <p className="text-xl font-bold text-green-800">
+                {(() => {
+                  const f = selectedProduct
+                    ? formatQtyPCS(totalIn, selectedProduct.unit, selectedProduct.sub_unit, selectedProduct.qty_per_box)
+                    : { text: `${totalIn}`, unit: inUnit };
+                  return <>{f.text}{f.unit && <span className="text-sm font-normal ml-1">{f.unit}</span>}</>;
+                })()}
+              </p>
+            </div>
+            <div className="bg-red-50 rounded-lg shadow px-4 py-3 min-w-[100px]">
+              <p className="text-xs text-red-600">Total Out</p>
+              <p className="text-xl font-bold text-red-800">
+                {outFmt.text}
+                {outFmt.unit && <span className="text-sm font-normal ml-1">{outFmt.unit}</span>}
+              </p>
+            </div>
+            <div className="bg-blue-50 rounded-lg shadow px-4 py-3 min-w-[100px]">
+              <p className="text-xs text-blue-600">Balance</p>
+              <p className="text-xl font-bold text-blue-800">
+                {(() => {
+                  const bal = totalIn - totalOut;
+                  const f = selectedProduct
+                    ? formatQtyPCS(Math.abs(bal), selectedProduct.unit, selectedProduct.sub_unit, selectedProduct.qty_per_box)
+                    : { text: `${bal}`, unit: inUnit };
+                  return <>{bal < 0 ? '-' : ''}{f.text}{f.unit && <span className="text-sm font-normal ml-1">{f.unit}</span>}</>;
+                })()}
+              </p>
+            </div>
+          </div>
+        );
+      })()}
 
       {loading ? (
         <p className="text-gray-500">Loading...</p>
@@ -271,19 +317,26 @@ export default function StockMovements() {
         <>
           {/* Mobile cards */}
           <div className="md:hidden space-y-2">
-            {displayData.map((r, idx) => (
-              <div key={idx} className="bg-white rounded-lg shadow p-3 flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-800">{r.label}</span>
-                <div className="flex gap-4">
-                  <span className={`text-sm font-semibold ${r.inQty > 0 ? 'text-green-700' : 'text-gray-300'}`}>
-                    {r.inQty > 0 ? `+${r.inQty}` : '—'}
-                  </span>
-                  <span className={`text-sm font-semibold ${r.outQty > 0 ? 'text-red-700' : 'text-gray-300'}`}>
-                    {r.outQty > 0 ? `-${r.outQty}` : '—'}
-                  </span>
+            {displayData.map((r, idx) => {
+              const rowInUnit = filterProductId ? inUnit : (r.unit || '');
+              const rUnit = filterProductId ? selectedProduct?.unit : r.unit;
+              const rSubUnit = filterProductId ? selectedProduct?.sub_unit : r.sub_unit;
+              const rQpb = filterProductId ? selectedProduct?.qty_per_box : r.qty_per_box;
+              const outFmt = formatOutQty(r.outQty, rUnit, rSubUnit, rQpb);
+              return (
+                <div key={idx} className="bg-white rounded-lg shadow p-3 flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-800">{r.label}</span>
+                  <div className="flex gap-4">
+                    <span className={`text-sm font-semibold ${r.inQty > 0 ? 'text-green-700' : 'text-gray-300'}`}>
+                      {r.inQty > 0 ? (() => { const f = formatQtyPCS(r.inQty, rUnit, rSubUnit, rQpb); return `+${f.text}${f.unit ? ' ' + f.unit : ''}`; })() : '—'}
+                    </span>
+                    <span className={`text-sm font-semibold ${r.outQty > 0 ? 'text-red-700' : 'text-gray-300'}`}>
+                      {r.outQty > 0 ? `-${outFmt.text}${outFmt.unit ? ' ' + outFmt.unit : ''}` : '—'}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Desktop table */}
@@ -294,40 +347,76 @@ export default function StockMovements() {
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     {!filterProductId ? 'Product' : period === 'monthly' ? 'Date' : period === 'weekly' ? 'Week' : 'Month'}
                   </th>
-                  <th className="px-5 py-3 text-right text-xs font-medium text-green-700 uppercase bg-green-50 w-36">In Qty</th>
-                  <th className="px-5 py-3 text-right text-xs font-medium text-red-700 uppercase bg-red-50 w-36">Out Qty</th>
+                  <th className="px-5 py-3 text-right text-xs font-medium text-green-700 uppercase bg-green-50 w-40">
+                    In Qty{inUnit && <span className="normal-case font-normal ml-1">({inUnit})</span>}
+                  </th>
+                  <th className="px-5 py-3 text-right text-xs font-medium text-red-700 uppercase bg-red-50 w-40">
+                    Out Qty{outUnit && <span className="normal-case font-normal ml-1">({outUnit})</span>}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {displayData.map((r, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50">
-                    <td className="px-5 py-2.5 text-sm font-medium text-gray-800">
-                      {r.label}
-                      {r.sublabel && <span className="text-xs text-gray-400 ml-1">({r.sublabel})</span>}
-                    </td>
-                    <td className="px-5 py-2.5 text-sm text-right font-semibold bg-green-50/50">
-                      {r.inQty > 0 ? (
-                        <span className="text-green-700">{r.inQty}</span>
-                      ) : (
-                        <span className="text-gray-200">—</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-2.5 text-sm text-right font-semibold bg-red-50/50">
-                      {r.outQty > 0 ? (
-                        <span className="text-red-700">{r.outQty}</span>
-                      ) : (
-                        <span className="text-gray-200">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {displayData.map((r, idx) => {
+                  const rowInUnit = filterProductId ? inUnit : (r.unit || '');
+                  const rUnit = filterProductId ? selectedProduct?.unit : r.unit;
+                  const rSubUnit = filterProductId ? selectedProduct?.sub_unit : r.sub_unit;
+                  const rQpb = filterProductId ? selectedProduct?.qty_per_box : r.qty_per_box;
+                  const outFmt = formatOutQty(r.outQty, rUnit, rSubUnit, rQpb);
+                  return (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      <td className="px-5 py-2.5 text-sm font-medium text-gray-800">
+                        {r.label}
+                        {r.sublabel && <span className="text-xs text-gray-400 ml-1">({r.sublabel})</span>}
+                      </td>
+                      <td className="px-5 py-2.5 text-sm text-right font-semibold bg-green-50/50">
+                        {r.inQty > 0 ? (() => {
+                          const f = formatQtyPCS(r.inQty, rUnit, rSubUnit, rQpb);
+                          return (
+                            <span className="text-green-700">
+                              {f.text}
+                              {f.unit && <span className="text-xs font-normal ml-1 text-green-600">{f.unit}</span>}
+                            </span>
+                          );
+                        })() : (
+                          <span className="text-gray-200">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-2.5 text-sm text-right font-semibold bg-red-50/50">
+                        {r.outQty > 0 ? (
+                          <span className="text-red-700">
+                            {outFmt.text}
+                            {outFmt.unit && <span className="text-xs font-normal ml-1 text-red-600">{outFmt.unit}</span>}
+                          </span>
+                        ) : (
+                          <span className="text-gray-200">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot className="bg-gray-50 border-t-2 border-gray-300">
-                <tr>
-                  <td className="px-5 py-3 text-sm font-bold text-gray-700 text-right">Total</td>
-                  <td className="px-5 py-3 text-sm text-right font-bold text-green-700 bg-green-50">{totalIn}</td>
-                  <td className="px-5 py-3 text-sm text-right font-bold text-red-700 bg-red-50">{totalOut}</td>
-                </tr>
+                {(() => {
+                  const totOutFmt = selectedProduct
+                    ? formatOutQty(totalOut, selectedProduct.unit, selectedProduct.sub_unit, selectedProduct.qty_per_box)
+                    : { text: `${totalOut}`, unit: outUnit };
+                  return (
+                    <tr>
+                      <td className="px-5 py-3 text-sm font-bold text-gray-700 text-right">Total</td>
+                      <td className="px-5 py-3 text-sm text-right font-bold text-green-700 bg-green-50">
+                        {(() => {
+                          const f = selectedProduct
+                            ? formatQtyPCS(totalIn, selectedProduct.unit, selectedProduct.sub_unit, selectedProduct.qty_per_box)
+                            : { text: `${totalIn}`, unit: inUnit };
+                          return <>{f.text}{f.unit && <span className="text-xs font-normal ml-1">{f.unit}</span>}</>;
+                        })()}
+                      </td>
+                      <td className="px-5 py-3 text-sm text-right font-bold text-red-700 bg-red-50">
+                        {totOutFmt.text}{totOutFmt.unit && <span className="text-xs font-normal ml-1">{totOutFmt.unit}</span>}
+                      </td>
+                    </tr>
+                  );
+                })()}
               </tfoot>
             </table>
           </div>

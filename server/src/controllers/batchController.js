@@ -469,6 +469,7 @@ const getStockEntrySiblings = async (req, res, next) => {
               COALESCE(sm.received_date, sm.created_at::date)::date AS received_date,
               sm.product_id, sm.batch_id,
               p.product_name, p.product_code, p.batch_tracking, p.image_url,
+              p.unit, p.sub_unit, p.qty_per_box,
               ib.batch_number, ib.manufacture_date, ib.expiry_date,
               c.customer_name AS supplier_name
        FROM stock_movements sm

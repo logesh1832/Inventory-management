@@ -51,14 +51,20 @@ export default function MaterialInDetail() {
   const totalQty = entries.reduce((sum, e) => sum + e.quantity, 0);
   const firstEntryId = entries.length > 0 ? entries[0].id : null;
 
+  // qty is stored in primary unit (Boxes) for MI
+  // qty is stored in PCS (sub-unit) after migration; convert to Box display
   const formatQty = (e) => {
     const qty = e.quantity;
     const unit = e.unit || '';
     const subUnit = e.sub_unit;
     const qtyPerBox = e.qty_per_box;
     if (subUnit && qtyPerBox) {
-      const boxes = qty / qtyPerBox;
-      return <span>{boxes} {unit} ({qty} {subUnit})</span>;
+      const boxes = Math.floor(qty / qtyPerBox);
+      const remaining = qty % qtyPerBox;
+      const boxPart = boxes > 0 || remaining === 0 ? `${boxes} ${unit}` : '';
+      const pcsPart = remaining > 0 ? `${remaining} ${subUnit}` : '';
+      const display = [boxPart, pcsPart].filter(Boolean).join(' + ');
+      return <span>{display} <span className="text-gray-400 text-[10px]">({qty} {subUnit})</span></span>;
     }
     return <span>{qty} {unit}</span>;
   };
@@ -223,7 +229,7 @@ export default function MaterialInDetail() {
                     ) : '-'}
                   </td>
                   <td className="px-4 py-2 text-sm text-right">
-                    <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-semibold">+{e.quantity}</span>
+                    <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-semibold">+{formatQty(e)}</span>
                   </td>
                   <td className="px-4 py-2 text-sm text-center">
                     <button onClick={() => handleDeleteEntry(e.id)} className="text-red-600 hover:text-red-800 text-xs font-medium">

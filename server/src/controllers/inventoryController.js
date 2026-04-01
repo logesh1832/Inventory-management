@@ -59,7 +59,7 @@ const getStockMovements = async (req, res, next) => {
     const offset = (Number(page) - 1) * Number(limit);
     params.push(Number(limit));
     params.push(offset);
-    const selectFields = `sm.*, p.product_name, p.product_code, ib.batch_number,
+    const selectFields = `sm.*, p.product_name, p.product_code, p.unit, p.sub_unit, p.qty_per_box, ib.batch_number,
       c_supplier.customer_name AS supplier_name,
       CASE WHEN sm.reference_type = 'ORDER' THEN o.invoice_number ELSE NULL END AS invoice_number,
       c_order.customer_name AS customer_name`;
@@ -98,7 +98,7 @@ const getLiveStockByProduct = async (req, res, next) => {
     const { product_id } = req.params;
 
     const productResult = await pool.query(
-      'SELECT product_name, product_code, unit FROM products WHERE id = $1',
+      'SELECT product_name, product_code, unit, sub_unit, qty_per_box FROM products WHERE id = $1',
       [product_id]
     );
 
@@ -160,17 +160,10 @@ const getStockReport = async (req, res, next) => {
 
     if (low_stock_threshold) {
       params.push(Number(low_stock_threshold));
-      query += ` HAVING CASE
-        WHEN p.sub_unit IS NOT NULL AND p.qty_per_box IS NOT NULL AND p.qty_per_box > 0
-        THEN COALESCE(SUM(ib.quantity_remaining), 0)::numeric / p.qty_per_box
-        ELSE COALESCE(SUM(ib.quantity_remaining), 0)
-      END < $${params.length}`;
+      // quantity_remaining is in PCS for products with sub_unit; divide by qty_per_box to compare in Boxes
+      query += ` HAVING COALESCE(SUM(ib.quantity_remaining), 0) / COALESCE(p.qty_per_box, 1) < $${params.length}`;
     } else if (low_stock) {
-      query += ` HAVING CASE
-        WHEN p.sub_unit IS NOT NULL AND p.qty_per_box IS NOT NULL AND p.qty_per_box > 0
-        THEN COALESCE(SUM(ib.quantity_remaining), 0)::numeric / p.qty_per_box
-        ELSE COALESCE(SUM(ib.quantity_remaining), 0)
-      END < COALESCE(p.low_stock_threshold, 50)`;
+      query += ` HAVING COALESCE(SUM(ib.quantity_remaining), 0) / COALESCE(p.qty_per_box, 1) < COALESCE(p.low_stock_threshold, 50)`;
     }
 
     query += ` ORDER BY p.product_name ASC`;
@@ -400,6 +393,7 @@ const getProductMovements = async (req, res, next) => {
         p.product_name,
         p.product_code,
         ib.batch_number,
+        p.unit, p.sub_unit, p.qty_per_box,
         c_supplier.customer_name AS supplier_name,
         o.invoice_number,
         c_order.customer_name AS customer_name

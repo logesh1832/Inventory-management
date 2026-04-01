@@ -24,8 +24,8 @@ export default function Batches() {
   const [suppliers, setSuppliers] = useState([]);
   const [filterProductId, setFilterProductId] = useState('');
   const [filterSupplierId, setFilterSupplierId] = useState('');
-  const [fromDate, setFromDate] = useState(monthStart());
-  const [toDate, setToDate] = useState(today());
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);

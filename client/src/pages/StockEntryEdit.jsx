@@ -115,6 +115,13 @@ export default function StockEntryEdit() {
           } catch {}
         }
 
+        // Stored in PCS after migration; convert back to display unit
+        const ePqs = e.qty_per_box;
+        const eSub = e.sub_unit;
+        const isPcsEntry = eSub && ePqs && (e.quantity % ePqs !== 0);
+        const displayQty = (eSub && ePqs && !isPcsEntry) ? String(e.quantity / ePqs) : String(e.quantity);
+        const displayUnit = isPcsEntry ? 'pieces' : 'boxes';
+
         rowsData.push({
           id: e.id,
           product_id: e.product_id,
@@ -122,7 +129,8 @@ export default function StockEntryEdit() {
           product_code: e.product_code,
           batch_tracking: e.batch_tracking,
           batch_id: e.batch_id,
-          quantity: String(e.quantity),
+          quantity: displayQty,
+          qty_unit: displayUnit,
           batchMode: 'current',
           existing_batch_id: '',
           batch_number: e.batch_number || '',
@@ -157,6 +165,7 @@ export default function StockEntryEdit() {
         batch_tracking: false,
         batch_id: null,
         quantity: '',
+        qty_unit: 'boxes',
         batchMode: 'new',
         existing_batch_id: '',
         batch_number: '',
@@ -272,9 +281,13 @@ export default function StockEntryEdit() {
 
       // Update existing entries
       for (const row of existingRows) {
+        const prod = products.find((p) => p.id === row.product_id);
+        const rawQty = Number(row.quantity);
+        const savedQty = (prod && prod.sub_unit && prod.qty_per_box && (row.qty_unit || 'boxes') === 'boxes')
+          ? rawQty * prod.qty_per_box : rawQty;
         const payload = {
           product_id: row.product_id,
-          quantity: Number(row.quantity),
+          quantity: savedQty,
           supplier_id: supplierId || null,
           received_date: receivedDate || null,
           reference_number: referenceNumber || null,
@@ -295,9 +308,13 @@ export default function StockEntryEdit() {
       // Create new entries via bulk endpoint
       if (newRows.length > 0) {
         const items = newRows.map((row) => {
+          const prod = products.find((p) => p.id === row.product_id);
+          const rawQty = Number(row.quantity);
+          const savedQty = (prod && prod.sub_unit && prod.qty_per_box && (row.qty_unit || 'boxes') === 'boxes')
+            ? rawQty * prod.qty_per_box : rawQty;
           const item = {
             product_id: row.product_id,
-            quantity: Number(row.quantity),
+            quantity: savedQty,
           };
           if (row.batch_tracking && row.batchMode === 'existing' && row.existing_batch_id) {
             item.existing_batch_id = row.existing_batch_id;
@@ -549,26 +566,55 @@ export default function StockEntryEdit() {
                   </div>
                   <div className="sm:col-span-4">
                     <label className="block text-xs font-medium text-gray-500 mb-1">Quantity <span className="text-red-500">*</span></label>
-                    <input
-                      ref={(el) => (qtyRefs.current[row.id] = el)}
-                      type="number"
-                      min="1"
-                      value={row.quantity}
-                      onChange={(e) => updateRow(row.id, 'quantity', e.target.value)}
-                      onKeyDown={(e) => handleQtyKeyDown(e, row)}
-                      autoFocus={idx === 0 && !isNewRow(row)}
-                      placeholder="0"
-                      className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500"
-                    />
+                    <div className="flex gap-1">
+                      <input
+                        ref={(el) => (qtyRefs.current[row.id] = el)}
+                        type="number"
+                        min="1"
+                        value={row.quantity}
+                        onChange={(e) => updateRow(row.id, 'quantity', e.target.value)}
+                        onKeyDown={(e) => handleQtyKeyDown(e, row)}
+                        autoFocus={idx === 0 && !isNewRow(row)}
+                        placeholder="0"
+                        className="flex-1 border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500"
+                      />
+                      {(() => {
+                        const prod = products.find((p) => p.id === row.product_id);
+                        if (prod && prod.sub_unit && prod.qty_per_box) {
+                          return (
+                            <select
+                              value={row.qty_unit || 'boxes'}
+                              onChange={(e) => updateRow(row.id, 'qty_unit', e.target.value)}
+                              className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-yellow-500 bg-white"
+                            >
+                              <option value="boxes">{prod.unit}</option>
+                              <option value="pieces">{prod.sub_unit}</option>
+                            </select>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
                     {(() => {
                       const prod = products.find((p) => p.id === row.product_id);
-                      if (prod && prod.unit === 'Boxes' && prod.qty_per_box && row.quantity) {
-                        const total = Number(row.quantity) * prod.qty_per_box;
-                        return (
-                          <p className="text-xs text-blue-600 font-medium mt-1">
-                            {row.quantity} x {prod.qty_per_box} = {total} pcs
-                          </p>
-                        );
+                      if (prod && prod.sub_unit && prod.qty_per_box && row.quantity) {
+                        const qty = Number(row.quantity);
+                        const ppb = prod.qty_per_box;
+                        if ((row.qty_unit || 'boxes') === 'boxes') {
+                          return (
+                            <p className="text-xs text-blue-600 font-medium mt-1">
+                              {qty} {prod.unit} x {ppb} = {qty * ppb} {prod.sub_unit}
+                            </p>
+                          );
+                        } else {
+                          const boxes = Math.floor(qty / ppb);
+                          const remaining = qty % ppb;
+                          return (
+                            <p className="text-xs text-blue-600 font-medium mt-1">
+                              {boxes > 0 ? `${boxes} ${prod.unit}` : ''}{boxes > 0 && remaining > 0 ? ' + ' : ''}{remaining > 0 ? `${remaining} ${prod.sub_unit}` : ''}{boxes === 0 && remaining === 0 ? `0 ${prod.sub_unit}` : ''}
+                            </p>
+                          );
+                        }
                       }
                       return null;
                     })()}

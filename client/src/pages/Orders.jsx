@@ -22,8 +22,8 @@ export default function Orders() {
     customer_id: '',
     product_id: '',
     status: '',
-    from_date: monthStart(),
-    to_date: today(),
+    from_date: '',
+    to_date: '',
   });
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);

@@ -15,7 +15,7 @@ const emptyItem = () => ({
   id: Date.now() + Math.random(),
   product_id: '',
   quantity: '',
-  qty_unit: 'default', // 'default' | 'boxes' | 'pieces'
+  qty_unit: 'boxes', // 'boxes' | 'pieces'
   batches: [],
   allocations: [],
   useManualBatch: false,
@@ -111,7 +111,7 @@ export default function OrderForm() {
       for (const item of order.items) {
         const prod = productsList.find((p) => p.id === item.product_id);
         let displayQty = String(item.quantity);
-        let qtyUnit = 'default';
+        let qtyUnit = 'boxes';
         if (prod && prod.sub_unit && prod.qty_per_box) {
           if (item.quantity % prod.qty_per_box === 0) {
             displayQty = String(item.quantity / prod.qty_per_box);
@@ -176,7 +176,7 @@ export default function OrderForm() {
       prev.map((item) => {
         if (item.id !== itemId) return item;
         const prod = products.find((p) => p.id === productId);
-        const qtyUnit = prod && prod.sub_unit && prod.qty_per_box ? 'boxes' : 'default';
+        const qtyUnit = 'boxes';
         return { ...item, product_id: productId, qty_unit: qtyUnit, batches: [], allocations: [], useManualBatch: false };
       })
     );
@@ -272,12 +272,16 @@ export default function OrderForm() {
     );
   };
 
+  // Returns total allocated to a batch in PCS (storage unit), for adjusted_remaining computation
   const getAllocatedForBatch = (batchId, excludeAllocId) => {
     let total = 0;
     for (const item of items) {
+      const prod = products.find((p) => p.id === item.product_id);
+      const factor = (prod && prod.sub_unit && prod.qty_per_box && item.qty_unit === 'boxes')
+        ? prod.qty_per_box : 1;
       for (const alloc of item.allocations) {
         if (alloc.id !== excludeAllocId && alloc.batch_id === batchId && alloc.quantity) {
-          total += Number(alloc.quantity);
+          total += Number(alloc.quantity) * factor;
         }
       }
     }
@@ -393,10 +397,10 @@ export default function OrderForm() {
       if (item.useManualBatch && item.allocations.length > 0) {
         const prod = products.find((p) => p.id === item.product_id);
         const rawQty = Number(item.quantity) || 0;
-        const totalQty = (prod && prod.sub_unit && prod.qty_per_box && (item.qty_unit === 'boxes' || item.qty_unit === 'default'))
+        // totalQtyPCS: item quantity in PCS (storage unit) for comparison with batch adjusted_remaining
+        const totalQtyPCS = (prod && prod.sub_unit && prod.qty_per_box && item.qty_unit === 'boxes')
           ? rawQty * prod.qty_per_box
           : rawQty;
-        const allocTotal = getAllocatedTotal(item);
 
         item.allocations.forEach((alloc, i) => {
           if (!alloc.batch_id) rowErrors.push(`Batch allocation ${i + 1}: select a batch`);
@@ -404,15 +408,30 @@ export default function OrderForm() {
           if (alloc.batch_id && alloc.quantity) {
             const adjusted = getAdjustedBatches(item, alloc.id);
             const batch = adjusted.find((b) => b.id === alloc.batch_id);
-            if (batch && Number(alloc.quantity) > batch.adjusted_remaining) {
-              const batchLabel = batch.batch_number || `Batch (rcvd ${batch.received_date ? batch.received_date.slice(0, 10) : ''})`;
-              rowErrors.push(`${batchLabel}: only ${batch.adjusted_remaining} available`);
+            if (batch) {
+              // Convert alloc qty to PCS for comparison with adjusted_remaining (PCS)
+              const allocQtyPCS = (prod && prod.sub_unit && prod.qty_per_box && item.qty_unit === 'boxes')
+                ? Number(alloc.quantity) * prod.qty_per_box
+                : Number(alloc.quantity);
+              if (allocQtyPCS > batch.adjusted_remaining) {
+                const batchLabel = batch.batch_number || `Batch (rcvd ${batch.received_date ? batch.received_date.slice(0, 10) : ''})`;
+                const availInUnit = (prod && prod.sub_unit && prod.qty_per_box && item.qty_unit === 'boxes')
+                  ? `${Math.floor(batch.adjusted_remaining / prod.qty_per_box)} ${prod.unit}`
+                  : `${batch.adjusted_remaining}${prod?.sub_unit ? ' ' + prod.sub_unit : ''}`;
+                rowErrors.push(`${batchLabel}: only ${availInUnit} available`);
+              }
             }
           }
         });
 
-        if (allocTotal !== totalQty && item.allocations.every((a) => a.batch_id && a.quantity)) {
-          rowErrors.push(`Batch allocations (${allocTotal}) must equal total quantity (${totalQty})`);
+        // Compare alloc total (in PCS) vs item qty (in PCS)
+        const allocTotalPCS = item.allocations.reduce((sum, a) => {
+          const qty = Number(a.quantity) || 0;
+          return sum + ((prod && prod.sub_unit && prod.qty_per_box && item.qty_unit === 'boxes')
+            ? qty * prod.qty_per_box : qty);
+        }, 0);
+        if (allocTotalPCS !== totalQtyPCS && item.allocations.every((a) => a.batch_id && a.quantity)) {
+          rowErrors.push(`Batch allocations (${allocTotalPCS}) must equal total quantity (${totalQtyPCS})`);
         }
       }
 
@@ -435,7 +454,7 @@ export default function OrderForm() {
         const prod = products.find((p) => p.id === item.product_id);
         const getActualQty = (qty) => {
           const n = Number(qty);
-          if (prod && prod.sub_unit && prod.qty_per_box && (item.qty_unit === 'boxes' || item.qty_unit === 'default')) {
+          if (prod && prod.sub_unit && prod.qty_per_box && (item.qty_unit === 'boxes')) {
             return n * prod.qty_per_box;
           }
           return n;
@@ -443,9 +462,12 @@ export default function OrderForm() {
 
         if (item.useManualBatch && item.allocations.length > 0) {
           for (const alloc of item.allocations) {
+            const allocQty = (prod && prod.sub_unit && prod.qty_per_box && item.qty_unit === 'boxes')
+              ? Number(alloc.quantity) * prod.qty_per_box
+              : Number(alloc.quantity);
             payload.push({
               product_id: item.product_id,
-              quantity: Number(alloc.quantity),
+              quantity: allocQty,
               batch_id: alloc.batch_id,
             });
           }
@@ -605,11 +627,23 @@ export default function OrderForm() {
                         placeholder="Select product..."
                         autoFocusNext={{ current: qtyRefs.current[item.id] }}
                       />
-                      {item.product_id && (
-                        <p className="text-xs text-gray-400 mt-1">
-                          Total available: <span className="font-medium text-gray-600">{getProductStock(item.product_id)}</span>
-                        </p>
-                      )}
+                      {item.product_id && (() => {
+                        const prod = products.find((p) => p.id === item.product_id);
+                        const stockPCS = getProductStock(item.product_id);
+                        let displayStock;
+                        if (prod && prod.sub_unit && prod.qty_per_box) {
+                          displayStock = item.qty_unit === 'boxes'
+                            ? `${Math.floor(stockPCS / prod.qty_per_box)} ${prod.unit}`
+                            : `${stockPCS} ${prod.sub_unit}`;
+                        } else {
+                          displayStock = `${stockPCS}${prod?.unit ? ' ' + prod.unit : ''}`;
+                        }
+                        return (
+                          <p className="text-xs text-gray-400 mt-1">
+                            Total available: <span className="font-medium text-gray-600">{displayStock}</span>
+                          </p>
+                        );
+                      })()}
                     </div>
                     <div className="sm:col-span-4">
                       <label className="block text-xs font-medium text-gray-500 mb-1">Quantity <span className="text-red-500">*</span></label>
@@ -646,7 +680,7 @@ export default function OrderForm() {
                         if (prod && prod.sub_unit && prod.qty_per_box && item.quantity) {
                           const qty = Number(item.quantity);
                           const ppb = prod.qty_per_box;
-                          if (item.qty_unit === 'boxes' || item.qty_unit === 'default') {
+                          if (item.qty_unit === 'boxes') {
                             return (
                               <p className="text-xs text-blue-600 font-medium mt-1">
                                 {qty} {prod.unit} x {ppb} = {qty * ppb} {prod.sub_unit}
@@ -674,16 +708,13 @@ export default function OrderForm() {
                         <span className="text-xs font-semibold text-gray-500">Batch Allocations</span>
                         <div className="flex items-center gap-3">
                           {item.quantity && (() => {
-                            const prod = products.find((p) => p.id === item.product_id);
                             const rawQty = Number(item.quantity) || 0;
-                            const totalPcs = (prod && prod.sub_unit && prod.qty_per_box && (item.qty_unit === 'boxes' || item.qty_unit === 'default'))
-                              ? rawQty * prod.qty_per_box : rawQty;
                             const allocTotal = getAllocatedTotal(item);
                             return (
                               <span className={`text-xs font-medium ${
-                                allocTotal === totalPcs ? 'text-green-600' : allocTotal > totalPcs ? 'text-red-600' : 'text-yellow-600'
+                                allocTotal === rawQty ? 'text-green-600' : allocTotal > rawQty ? 'text-red-600' : 'text-yellow-600'
                               }`}>
-                                {allocTotal} / {totalPcs} allocated
+                                {allocTotal} / {rawQty} allocated
                               </span>
                             );
                           })()}
@@ -703,6 +734,20 @@ export default function OrderForm() {
                           const adjusted = getAdjustedBatches(item, alloc.id);
                           const available = adjusted.filter((b) => b.adjusted_remaining > 0 || b.id === alloc.batch_id);
                           const selectedBatch = adjusted.find((b) => b.id === alloc.batch_id);
+                          const allocProd = products.find((p) => p.id === item.product_id);
+                          const batchAvailDisplay = (b) => {
+                            if (allocProd && allocProd.sub_unit && allocProd.qty_per_box) {
+                              return item.qty_unit === 'boxes'
+                                ? `${Math.floor(b.adjusted_remaining / allocProd.qty_per_box)} ${allocProd.unit}`
+                                : `${b.adjusted_remaining} ${allocProd.sub_unit}`;
+                            }
+                            return `${b.adjusted_remaining}`;
+                          };
+                          const maxAllocQty = selectedBatch
+                            ? (allocProd && allocProd.sub_unit && allocProd.qty_per_box && item.qty_unit === 'boxes'
+                                ? Math.floor(selectedBatch.adjusted_remaining / allocProd.qty_per_box)
+                                : selectedBatch.adjusted_remaining)
+                            : undefined;
 
                           return (
                             <div key={alloc.id} className="flex flex-col sm:flex-row sm:items-start gap-2">
@@ -711,8 +756,8 @@ export default function OrderForm() {
                                   options={available.map((b) => ({
                                     value: b.id,
                                     label: b.batch_number
-                                      ? `${b.batch_number} — Available: ${b.adjusted_remaining}`
-                                      : `No batch (Rcvd: ${b.received_date ? b.received_date.slice(0, 10) : '—'}) — Available: ${b.adjusted_remaining}`,
+                                      ? `${b.batch_number} — Available: ${batchAvailDisplay(b)}`
+                                      : `No batch (Rcvd: ${b.received_date ? b.received_date.slice(0, 10) : '—'}) — Available: ${batchAvailDisplay(b)}`,
                                     sublabel: [
                                       b.manufacture_date ? `Mfg: ${fmtDate(b.manufacture_date)}` : '',
                                       b.expiry_date ? `Exp: ${fmtDate(b.expiry_date)}` : '',
@@ -731,7 +776,7 @@ export default function OrderForm() {
                                   data-alloc-qty={alloc.id}
                                   type="number"
                                   min="1"
-                                  max={selectedBatch ? selectedBatch.adjusted_remaining : undefined}
+                                  max={maxAllocQty}
                                   value={alloc.quantity}
                                   onChange={(e) => updateAllocation(item.id, alloc.id, 'quantity', e.target.value)}
                                   onKeyDown={(e) => handleAllocQtyKeyDown(e, item, allocIdx)}

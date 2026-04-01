@@ -272,14 +272,21 @@ export default function BatchForm() {
 
     setSubmitting(true);
     try {
-      const items = rows.map((r) => ({
+      const items = rows.map((r) => {
+        const prod = products.find((p) => p.id === r.product_id);
+        const rawQty = Number(r.quantity);
+        const qty = (prod && prod.sub_unit && prod.qty_per_box && (r.qty_unit || 'boxes') === 'boxes')
+          ? rawQty * prod.qty_per_box
+          : rawQty;
+        return {
         product_id: r.product_id,
-        quantity: Number(r.quantity),
+        quantity: qty,
         existing_batch_id: r.mode === 'existing' ? r.existing_batch_id : null,
         new_batch_number: r.mode === 'new' && r.new_batch_number.trim() ? r.new_batch_number.trim() : null,
         manufacture_date: r.batch_tracking && r.manufacture_date ? r.manufacture_date : null,
         expiry_date: r.batch_tracking && r.expiry_date ? r.expiry_date : null,
-      }));
+        };
+      });
 
       await api.post('/batches/bulk', {
         supplier_id: supplierId,

@@ -7,8 +7,9 @@ const stockBadge = (qty, threshold = 50) => {
   return 'bg-green-100 text-green-700';
 };
 
+// total_stock is stored in PCS for products with sub_unit; convert to Boxes for primary display
 const primaryStock = (p) => {
-  if (p.sub_unit && p.qty_per_box) return p.total_stock / p.qty_per_box;
+  if (p.sub_unit && p.qty_per_box) return Math.floor(p.total_stock / p.qty_per_box);
   return p.total_stock;
 };
 
@@ -97,8 +98,14 @@ export default function StockReport() {
                   <span className="font-medium text-gray-900">{p.product_name}</span>
                   <span className={`inline-block px-2 py-1 rounded text-sm font-semibold ${stockBadge(primaryStock(p), p.low_stock_threshold)}`}>
                     {primaryStock(p)} {p.unit}
+                    {p.sub_unit && p.qty_per_box && p.total_stock % p.qty_per_box > 0 && (
+                      <span className="font-normal ml-1">+ {p.total_stock % p.qty_per_box} {p.sub_unit}</span>
+                    )}
                   </span>
                 </div>
+                {p.sub_unit && p.qty_per_box && (
+                  <div className="text-xs text-gray-400">{p.total_stock} {p.sub_unit} total</div>
+                )}
                 <div className="text-sm text-gray-500">
                   <span className="text-gray-400">Code:</span> {p.product_code}
                 </div>
@@ -139,7 +146,13 @@ export default function StockReport() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-block px-2 py-1 rounded text-sm font-semibold ${stockBadge(primaryStock(p), p.low_stock_threshold)}`}>
                         {primaryStock(p)} {p.unit}
+                        {p.sub_unit && p.qty_per_box && p.total_stock % p.qty_per_box > 0 && (
+                          <span className="font-normal ml-1">+ {p.total_stock % p.qty_per_box} {p.sub_unit}</span>
+                        )}
                       </span>
+                      {p.sub_unit && p.qty_per_box && (
+                        <p className="text-xs text-gray-400 mt-0.5">{p.total_stock} {p.sub_unit}</p>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {p.low_stock_threshold ?? 50}

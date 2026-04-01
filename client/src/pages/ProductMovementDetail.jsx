@@ -65,6 +65,27 @@ export default function ProductMovementDetail() {
   if (loading) return <p className="text-gray-500 p-6">Loading...</p>;
   if (!product) return <p className="text-gray-500 p-6">Product not found.</p>;
 
+  const { unit, sub_unit: subUnit, qty_per_box: qtyPerBox } = product.product;
+
+  // IN quantities are now stored in PCS (sub-unit); convert to Box display
+  const fmtIn = (qty) => {
+    if (!subUnit || !qtyPerBox) return `${qty} ${unit || ''}`.trim();
+    const boxes = Math.floor(qty / qtyPerBox);
+    const remaining = qty % qtyPerBox;
+    const boxPart = boxes > 0 || remaining === 0 ? `${boxes} ${unit}` : '';
+    const pcsPart = remaining > 0 ? `${remaining} ${subUnit}` : '';
+    const display = [boxPart, pcsPart].filter(Boolean).join(' + ');
+    return `${display} (${qty} ${subUnit})`;
+  };
+  const fmtOut = (qty) => {
+    if (!subUnit || !qtyPerBox) return `${qty} ${unit || ''}`.trim();
+    if (qty < qtyPerBox) return `${qty} ${subUnit}`;
+    const boxes = Math.floor(qty / qtyPerBox);
+    const remaining = qty % qtyPerBox;
+    if (remaining === 0) return `${boxes} ${unit}`;
+    return `${boxes} ${unit} + ${remaining} ${subUnit}`;
+  };
+
   return (
     <div>
       {/* Header */}
@@ -91,7 +112,25 @@ export default function ProductMovementDetail() {
           </div>
           <div className="text-left sm:text-right">
             <p className="text-sm text-gray-500">Current Stock</p>
-            <p className="text-2xl font-bold text-gray-800">{product.total_stock}</p>
+            {subUnit && qtyPerBox ? (
+              <>
+                <p className="text-2xl font-bold text-gray-800">
+                  {Math.floor(product.total_stock / qtyPerBox)}
+                  <span className="text-base font-normal ml-1 text-gray-500">{unit}</span>
+                  {product.total_stock % qtyPerBox > 0 && (
+                    <span className="text-base font-normal ml-1 text-gray-500">
+                      + {product.total_stock % qtyPerBox} {subUnit}
+                    </span>
+                  )}
+                </p>
+                <p className="text-sm text-gray-400">{product.total_stock} {subUnit}</p>
+              </>
+            ) : (
+              <p className="text-2xl font-bold text-gray-800">
+                {product.total_stock}
+                {unit && <span className="text-base font-normal ml-1 text-gray-500">{unit}</span>}
+              </p>
+            )}
           </div>
         </div>
 
@@ -99,11 +138,11 @@ export default function ProductMovementDetail() {
         <div className="flex flex-wrap gap-4">
           <div className="bg-green-50 rounded-lg px-4 py-3 min-w-[120px]">
             <p className="text-xs text-green-600 font-medium">Total In</p>
-            <p className="text-xl font-bold text-green-800">+{totalIn}</p>
+            <p className="text-xl font-bold text-green-800">+{fmtIn(totalIn)}</p>
           </div>
           <div className="bg-red-50 rounded-lg px-4 py-3 min-w-[120px]">
             <p className="text-xs text-red-600 font-medium">Total Out</p>
-            <p className="text-xl font-bold text-red-800">-{totalOut}</p>
+            <p className="text-xl font-bold text-red-800">-{fmtOut(totalOut)}</p>
           </div>
           <div className="bg-blue-50 rounded-lg px-4 py-3 min-w-[120px]">
             <p className="text-xs text-blue-600 font-medium">Total Movements</p>
@@ -162,7 +201,7 @@ export default function ProductMovementDetail() {
                       m.movement_type === 'IN' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                     }`}
                   >
-                    {m.movement_type === 'IN' ? '+' : '-'}{m.quantity}
+                    {m.movement_type === 'IN' ? '+' : '-'}{m.movement_type === 'IN' ? fmtIn(m.quantity) : fmtOut(m.quantity)}
                   </span>
                 </div>
                 <div className="text-sm text-gray-500">
@@ -217,7 +256,9 @@ export default function ProductMovementDetail() {
                       </span>
                     </td>
                     <td className="px-5 py-3 text-sm font-medium">
-                      {m.movement_type === 'IN' ? '+' : '-'}{m.quantity}
+                      <span className={m.movement_type === 'IN' ? 'text-green-700' : 'text-red-700'}>
+                        {m.movement_type === 'IN' ? '+' : '-'}{m.movement_type === 'IN' ? fmtIn(m.quantity) : fmtOut(m.quantity)}
+                      </span>
                     </td>
                     <td className="px-5 py-3 text-sm text-gray-600">{m.batch_number || '\u2014'}</td>
                     <td className="px-5 py-3 text-sm text-gray-600">{m.supplier_name || m.customer_name || '\u2014'}</td>
