@@ -533,7 +533,7 @@ const getStockEntryGroups = async (req, res, next) => {
              (array_agg(sm.party_name ORDER BY sm.created_at ASC))[1] AS party_name
       ${baseFrom}${whereClause}
       ${groupBy}
-      ORDER BY COALESCE(sm.received_date, sm.created_at::date)::date DESC, c.customer_name ASC
+      ORDER BY sm.voucher_number DESC NULLS LAST
       LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}
     `;
 

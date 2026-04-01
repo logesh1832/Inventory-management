@@ -39,7 +39,7 @@ export default function StockReport() {
 
   useEffect(() => {
     fetchStock(false, '');
-    api.get('/categories').then((res) => setCategories(res.data)).catch(() => {});
+    api.get('/products/categories').then((res) => setCategories(res.data)).catch(() => {});
   }, []);
 
   const handleLowStockToggle = () => {
@@ -95,7 +95,7 @@ export default function StockReport() {
           >
             <option value="">All Categories</option>
             {categories.map((c) => (
-              <option key={c.id} value={c.name}>{c.name}</option>
+              <option key={c} value={c}>{c}</option>
             ))}
           </select>
         </div>

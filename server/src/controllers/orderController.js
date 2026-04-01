@@ -216,7 +216,7 @@ const getAllOrders = async (req, res, next) => {
     const offset = (Number(page) - 1) * Number(limit);
     params.push(Number(limit));
     params.push(offset);
-    const dataQuery = `SELECT o.*, c.customer_name ${baseFrom}${whereClause} ORDER BY o.order_date DESC, o.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
+    const dataQuery = `SELECT o.*, c.customer_name ${baseFrom}${whereClause} ORDER BY o.invoice_number DESC NULLS LAST LIMIT $${params.length - 1} OFFSET $${params.length}`;
 
     const result = await pool.query(dataQuery, params);
     res.json({ data: result.rows, total, page: Number(page), limit: Number(limit) });
