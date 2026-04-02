@@ -138,13 +138,14 @@ export default function StockMovements() {
   const [tab, setTab] = useState('all'); // 'all' | 'in' | 'out'
   const [products, setProducts] = useState([]);
   const [filterProductId, setFilterProductId] = useState('');
-  const [period, setPeriod] = useState('monthly');
-  const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState('');
+  const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
 
   const [rawData, setRawData] = useState([]);
   const [totalIn, setTotalIn] = useState(0);
   const [totalOut, setTotalOut] = useState(0);
+  const [searched, setSearched] = useState(false);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -187,10 +188,14 @@ export default function StockMovements() {
     }
   };
 
-  useEffect(() => {
+  const handleSearch = () => {
+    if (!filterProductId || !period) {
+      showToast('Please select a product and period', 'error');
+      return;
+    }
+    setSearched(true);
     fetchMovements(filterProductId, tab, period);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterProductId, tab, period]);
+  };
 
   // Selected product info (for unit labels in single-product view)
   const selectedProduct = filterProductId ? products.find((p) => p.id === filterProductId) : null;
@@ -260,16 +265,25 @@ export default function StockMovements() {
             onChange={(e) => setPeriod(e.target.value)}
             className="border border-gray-300 rounded px-3 py-2 text-sm"
           >
+            <option value="">Select Period</option>
             <option value="weekly">Weekly</option>
             <option value="monthly">Monthly</option>
             <option value="quarterly">Quarterly</option>
             <option value="yearly">Yearly</option>
           </select>
         </div>
+        <div className="w-full sm:w-auto self-end">
+          <button
+            onClick={handleSearch}
+            className="bg-blue-600 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            Search
+          </button>
+        </div>
       </div>
 
       {/* Summary cards */}
-      {(() => {
+      {searched && (() => {
         const outFmt = selectedProduct
           ? formatOutQty(totalOut, selectedProduct.unit, selectedProduct.sub_unit, selectedProduct.qty_per_box)
           : { text: `${totalOut}`, unit: outUnit };
@@ -309,7 +323,9 @@ export default function StockMovements() {
         );
       })()}
 
-      {loading ? (
+      {!searched ? (
+        <p className="text-gray-400 text-sm">Select a product and period, then click Search.</p>
+      ) : loading ? (
         <p className="text-gray-500">Loading...</p>
       ) : displayData.length === 0 ? (
         <p className="text-gray-500">No movements found.</p>

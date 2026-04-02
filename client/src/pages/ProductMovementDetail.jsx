@@ -181,6 +181,7 @@ export default function ProductMovementDetail() {
             <option value="OUT">OUT</option>
           </select>
         </div>
+
       </div>
 
       {/* Movements Table */}

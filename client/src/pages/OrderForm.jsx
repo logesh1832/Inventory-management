@@ -142,7 +142,8 @@ export default function OrderForm() {
 
           formItem.batches = adjusted;
 
-          if (adjusted.length > 0 && item.deductions && item.deductions.length > 0) {
+          const hasNamedBatches = adjusted.some((b) => b.batch_number);
+          if (adjusted.length > 0 && hasNamedBatches && item.deductions && item.deductions.length > 0) {
             formItem.useManualBatch = true;
             formItem.allocations = item.deductions
               .filter((d) => d.batch_id)
@@ -157,7 +158,7 @@ export default function OrderForm() {
             if (formItem.allocations.length === 0) {
               formItem.allocations = [emptyAllocation()];
             }
-          } else if (adjusted.length > 0) {
+          } else if (adjusted.length > 0 && hasNamedBatches) {
             formItem.useManualBatch = true;
             formItem.allocations = [emptyAllocation()];
           }
@@ -201,6 +202,8 @@ export default function OrderForm() {
       }
 
       const hasAnyBatches = available.length > 0;
+      // Only show manual batch selection if at least one batch has a batch_number
+      const hasNamedBatches = available.some((b) => b.batch_number);
       setItems((prev) =>
         prev.map((item) => {
           if (item.id !== itemId) return item;
@@ -210,7 +213,7 @@ export default function OrderForm() {
           return {
             ...item,
             batches: available,
-            useManualBatch: hasAnyBatches,
+            useManualBatch: hasAnyBatches && hasNamedBatches,
             allocations: autoAlloc,
           };
         })
