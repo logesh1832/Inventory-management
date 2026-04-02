@@ -28,6 +28,14 @@ export default function ProductMovementDetail() {
       .finally(() => setLoading(false));
   }, [productId]);
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') navigate('/stock-report');
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigate]);
+
   const fetchMovements = async (fd, td, type, pg) => {
     setMovLoading(true);
     try {
