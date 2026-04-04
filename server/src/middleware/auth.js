@@ -19,7 +19,7 @@ const authenticate = async (req, res, next) => {
   }
 };
 
-// Check role(s)
+// Check role(s) — legacy, use requireCapability for dynamic roles
 const requireRole = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
@@ -32,4 +32,18 @@ const requireRole = (...roles) => {
   };
 };
 
-module.exports = { authenticate, requireRole, JWT_SECRET };
+// Check capability — supports dynamic roles
+// Admin role always has full access
+const requireCapability = (...requiredCaps) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: { message: 'Not authenticated.' } });
+    }
+    if (req.user.role === 'admin') return next();
+    const userCaps = req.user.capabilities || [];
+    if (requiredCaps.some((cap) => userCaps.includes(cap))) return next();
+    return res.status(403).json({ error: { message: 'Access denied. Insufficient permissions.' } });
+  };
+};
+
+module.exports = { authenticate, requireRole, requireCapability, JWT_SECRET };

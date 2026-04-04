@@ -45,7 +45,7 @@ const login = async (req, res, next) => {
     const capabilities = roleResult.rows.length > 0 ? roleResult.rows[0].capabilities : [];
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, name: user.name },
+      { id: user.id, email: user.email, role: user.role, name: user.name, capabilities },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
