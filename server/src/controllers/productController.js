@@ -5,6 +5,7 @@ const createProduct = async (req, res, next) => {
   try {
     const { product_name, product_code, unit, sub_unit, category, batch_tracking, qty_per_box, low_stock_threshold } = req.body;
     const image_url = req.file ? `/uploads/products/${req.file.filename}` : null;
+    const org_id = req.user.org_id;
 
     if (!product_name || !unit) {
       return res.status(400).json({ error: 'product_name and unit are required' });
@@ -13,10 +14,10 @@ const createProduct = async (req, res, next) => {
     const code = product_code?.trim() || product_name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/-+$/, '');
 
     const result = await pool.query(
-      `INSERT INTO products (product_name, product_code, unit, sub_unit, category, batch_tracking, qty_per_box, image_url, low_stock_threshold)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO products (product_name, product_code, unit, sub_unit, category, batch_tracking, qty_per_box, image_url, low_stock_threshold, org_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [product_name.trim(), code, unit.trim(), sub_unit?.trim() || null, category?.trim() || null, batch_tracking || false, sub_unit && qty_per_box ? Number(qty_per_box) : null, image_url, low_stock_threshold != null ? Number(low_stock_threshold) : 50]
+      [product_name.trim(), code, unit.trim(), sub_unit?.trim() || null, category?.trim() || null, batch_tracking || false, sub_unit && qty_per_box ? Number(qty_per_box) : null, image_url, low_stock_threshold != null ? Number(low_stock_threshold) : 50, org_id]
     );
 
     res.status(201).json(result.rows[0]);
@@ -32,6 +33,8 @@ const createProduct = async (req, res, next) => {
 const getAllProducts = async (req, res, next) => {
   try {
     const { status, category } = req.query;
+    const org_id = req.user.org_id;
+
     let query = `SELECT p.*, COALESCE(s.available_stock, 0)::int as available_stock
                  FROM products p
                  LEFT JOIN (
@@ -39,8 +42,8 @@ const getAllProducts = async (req, res, next) => {
                    FROM inventory_batches WHERE quantity_remaining > 0
                    GROUP BY product_id
                  ) s ON p.id = s.product_id`;
-    const params = [];
-    const conditions = [];
+    const params = [org_id];
+    const conditions = [`p.org_id = $1`];
 
     if (status) {
       params.push(status);
@@ -52,10 +55,7 @@ const getAllProducts = async (req, res, next) => {
       conditions.push(`p.category = $${params.length}`);
     }
 
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
-
+    query += ' WHERE ' + conditions.join(' AND ');
     query += ' ORDER BY p.created_at DESC';
 
     const result = await pool.query(query, params);
@@ -68,8 +68,10 @@ const getAllProducts = async (req, res, next) => {
 // GET /api/products/categories
 const getCategories = async (req, res, next) => {
   try {
+    const org_id = req.user.org_id;
     const result = await pool.query(
-      "SELECT DISTINCT category FROM products WHERE category IS NOT NULL ORDER BY category"
+      "SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND org_id = $1 ORDER BY category",
+      [org_id]
     );
     res.json(result.rows.map(r => r.category));
   } catch (err) {
@@ -81,6 +83,7 @@ const getCategories = async (req, res, next) => {
 const getProductById = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const org_id = req.user.org_id;
     const result = await pool.query(
       `SELECT p.*, COALESCE(s.available_stock, 0)::int as available_stock
        FROM products p
@@ -89,8 +92,8 @@ const getProductById = async (req, res, next) => {
          FROM inventory_batches WHERE quantity_remaining > 0
          GROUP BY product_id
        ) s ON p.id = s.product_id
-       WHERE p.id = $1`,
-      [id]
+       WHERE p.id = $1 AND p.org_id = $2`,
+      [id, org_id]
     );
 
     if (result.rows.length === 0) {
@@ -109,6 +112,7 @@ const updateProduct = async (req, res, next) => {
     const { id } = req.params;
     const { product_name, unit, sub_unit, status, category, batch_tracking, qty_per_box, low_stock_threshold } = req.body;
     const image_url = req.file ? `/uploads/products/${req.file.filename}` : null;
+    const org_id = req.user.org_id;
 
     const result = await pool.query(
       `UPDATE products
@@ -121,9 +125,9 @@ const updateProduct = async (req, res, next) => {
            qty_per_box = $7,
            image_url = COALESCE($8, image_url),
            low_stock_threshold = COALESCE($9, low_stock_threshold)
-       WHERE id = $10
+       WHERE id = $10 AND org_id = $11
        RETURNING *`,
-      [product_name, unit, sub_unit?.trim() || null, status, category, batch_tracking !== undefined ? batch_tracking : false, sub_unit && qty_per_box ? Number(qty_per_box) : null, image_url, low_stock_threshold != null ? Number(low_stock_threshold) : null, id]
+      [product_name, unit, sub_unit?.trim() || null, status, category, batch_tracking !== undefined ? batch_tracking : false, sub_unit && qty_per_box ? Number(qty_per_box) : null, image_url, low_stock_threshold != null ? Number(low_stock_threshold) : null, id, org_id]
     );
 
     if (result.rows.length === 0) {
@@ -140,8 +144,9 @@ const updateProduct = async (req, res, next) => {
 const deleteProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const org_id = req.user.org_id;
 
-    const product = await pool.query('SELECT id FROM products WHERE id = $1', [id]);
+    const product = await pool.query('SELECT id FROM products WHERE id = $1 AND org_id = $2', [id, org_id]);
     if (product.rows.length === 0) {
       return res.status(404).json({ error: 'Product not found' });
     }
@@ -155,8 +160,8 @@ const deleteProduct = async (req, res, next) => {
     }
 
     const result = await pool.query(
-      `UPDATE products SET status = 'inactive' WHERE id = $1 RETURNING *`,
-      [id]
+      `UPDATE products SET status = 'inactive' WHERE id = $1 AND org_id = $2 RETURNING *`,
+      [id, org_id]
     );
 
     res.json({ message: 'Product deleted', product: result.rows[0] });

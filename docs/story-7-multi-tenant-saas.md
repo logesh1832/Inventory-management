@@ -1,8 +1,8 @@
-# Story 7: Multi-Tenant SaaS Architecture
+# Story 7: Org-Based Multi-Tenant Architecture
 
 ## Overview
 
-Convert the single-tenant inventory management application into a **multi-tenant SaaS platform** with a single database serving multiple organizations. Each organization gets isolated data, custom branding, and role-based access — all managed through a platform-level super admin.
+Convert the single-tenant inventory management app into a fully **org-isolated multi-tenant platform**. A global super admin creates organizations. Each org gets its own isolated data — products, customers, units, roles, users, material in/out, orders, categories — nothing is shared between orgs.
 
 ---
 
@@ -10,350 +10,433 @@ Convert the single-tenant inventory management application into a **multi-tenant
 
 | Term | Description |
 |------|-------------|
-| **Platform Owner** | Us — the application owners. Has a "super_admin" role. Controls org creation, user limits, and billing tiers. |
-| **Organization (Org)** | A company/business that subscribes to the platform. Each org has isolated data. |
-| **Org Admin** | The primary user created when an org is registered. Has full access to their org's inventory features + branding settings. Cannot create users. |
-| **Inventory User** | Additional users within an org (created by Platform Owner). Can access inventory features but not org settings. |
+| **Super Admin** | Global platform owner. No org. Creates orgs and their first admin. Has a dedicated panel. |
+| **Org** | A company/business (e.g. GREE Marketing). Has its own `org_id` and `org_code`. |
+| **Org Admin** | First user created per org by super admin. Full access to their org's features. Can manage users, roles, units within their org. |
+| **Org User** | Additional users created by the org admin. Access depends on org-defined roles. |
 
 ---
 
-## Pricing Tiers (Configurable)
+## Architecture Rules
 
-| Plan | Max Users | Monthly Price |
-|------|-----------|---------------|
-| Starter | 5 users | Rs. 750/month |
-| Growth | 10 users | Rs. 1,200/month |
-| Business | 25 users | Rs. 2,500/month |
-| Enterprise | Unlimited | Custom pricing |
-
-> Platform Owner sets the plan for each org. The application enforces user limits based on the assigned plan.
+- Every piece of data belongs to exactly one org
+- `org_id` is added to ALL tables: `users`, `products`, `customers`, `inventory_batches`, `orders`, `order_items`, `stock_movements`, `units`, `roles`, `categories (product category field)`
+- `org_id` is always set from the JWT token on the backend — never from the request body
+- Every SELECT/INSERT/UPDATE/DELETE query is scoped to `req.user.org_id`
+- Super admin has `org_id = NULL` and bypasses all org filtering
 
 ---
 
-## User Stories
+## Story 7.1: Database Schema — Organizations & org_id Migration
 
-### Story 7.1: Organization & Multi-Tenant Database Schema
+**As a** developer,
+**I want** a database schema that supports full org-level data isolation,
+**So that** every table's data belongs to one org and cannot be accessed by another.
 
-**As a** platform owner,
-**I want** a database schema that supports multiple organizations with data isolation,
-**So that** each org's data (products, customers, orders, batches, etc.) is completely separated.
-
-**Acceptance Criteria:**
-- New `organizations` table with: id, org_name, org_email, org_phone, address, logo_url, primary_color, secondary_color, header_text, plan (enum: starter/growth/business/enterprise), max_users, is_active, created_at, updated_at
-- New `org_settings` table (optional — or embed in organizations): theme colors, logo path, header display text
-- Add `org_id` (UUID, NOT NULL) column to ALL existing data tables: products, customers, inventory_batches, orders, order_items, stock_movements
-- Add `org_id` to the `users` table
-- Update the `users` table role enum: `super_admin`, `org_admin`, `inventory`
-- All existing queries must be updated to include `WHERE org_id = $X` filtering
-- Database indexes on `org_id` for all tables to ensure query performance
-- A default "platform" org is created for the super_admin user during migration
-
-**Schema Changes:**
+### New Table: `organizations`
 
 ```sql
--- New table
 CREATE TABLE organizations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_code VARCHAR(50) NOT NULL UNIQUE,
   org_name VARCHAR(255) NOT NULL,
   org_email VARCHAR(255) NOT NULL UNIQUE,
   org_phone VARCHAR(50),
   address TEXT,
-  logo_url TEXT,
-  primary_color VARCHAR(7) DEFAULT '#EAB308',   -- yellow-500
-  secondary_color VARCHAR(7) DEFAULT '#1F2937',  -- gray-800
-  header_text VARCHAR(255),
-  plan VARCHAR(20) NOT NULL DEFAULT 'starter',
-  max_users INT NOT NULL DEFAULT 5,
   is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Add org_id to all data tables
-ALTER TABLE users ADD COLUMN org_id UUID REFERENCES organizations(id);
-ALTER TABLE products ADD COLUMN org_id UUID REFERENCES organizations(id);
-ALTER TABLE customers ADD COLUMN org_id UUID REFERENCES organizations(id);
-ALTER TABLE inventory_batches ADD COLUMN org_id UUID REFERENCES organizations(id);
-ALTER TABLE orders ADD COLUMN org_id UUID REFERENCES organizations(id);
-ALTER TABLE order_items ADD COLUMN org_id UUID REFERENCES organizations(id);
-ALTER TABLE stock_movements ADD COLUMN org_id UUID REFERENCES organizations(id);
+CREATE UNIQUE INDEX idx_org_code ON organizations(org_code);
 ```
 
----
+### Add `org_id` to All Existing Tables
 
-### Story 7.2: Platform Owner (Super Admin) Panel
+```sql
+-- Users
+ALTER TABLE users ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+ALTER TABLE users ADD COLUMN is_super_admin BOOLEAN NOT NULL DEFAULT false;
+-- Email uniqueness becomes per-org
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key;
+ALTER TABLE users ADD CONSTRAINT unique_email_per_org UNIQUE (org_id, email);
 
-**As a** platform owner (super_admin),
-**I want** a dedicated panel to create and manage organizations and their user allocations,
-**So that** I can onboard new clients and control their subscription limits.
+-- Roles (org-specific)
+ALTER TABLE roles ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+ALTER TABLE roles DROP CONSTRAINT IF EXISTS roles_name_key;
+ALTER TABLE roles ADD CONSTRAINT unique_role_name_per_org UNIQUE (org_id, name);
 
-**Acceptance Criteria:**
+-- Units (org-specific)
+ALTER TABLE units ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+ALTER TABLE units DROP CONSTRAINT IF EXISTS units_name_key;
+ALTER TABLE units ADD CONSTRAINT unique_unit_name_per_org UNIQUE (org_id, name);
 
-#### Org Management
-- Super admin sees a dedicated "Organizations" page in sidebar (only visible to super_admin)
-- Can create a new organization: org_name, org_email, org_phone, address, plan selection
-- On org creation, an **org_admin user** is automatically created with the org_email and a generated/provided password
-- The org_admin's credentials are shown once after creation (or sent via email placeholder)
-- Can view list of all organizations with: name, email, plan, user count / max users, status (active/inactive), created date
-- Can edit org details: name, phone, address, plan, max_users, is_active toggle
-- Can deactivate an org (blocks all logins for that org)
+-- Products (org-specific)
+ALTER TABLE products ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+ALTER TABLE products DROP CONSTRAINT IF EXISTS products_product_code_key;
+ALTER TABLE products ADD CONSTRAINT unique_product_code_per_org UNIQUE (org_id, product_code);
 
-#### User Management (per org)
-- Super admin sees "Users" page listing ALL users across all orgs, grouped/filterable by org
-- Can create users **for any org**: name, email, password, role (org_admin or inventory), org assignment
-- User creation respects the org's max_users limit — shows error if limit reached
-- Can deactivate/activate individual users
-- Can reset user passwords
+-- Customers (org-specific)
+ALTER TABLE customers ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
 
-#### Dashboard
-- Super admin dashboard shows: total orgs, total users, active orgs, orgs by plan breakdown
-- Does NOT show inventory data (super admin is platform-level, not org-level)
+-- Inventory Batches (org-specific)
+ALTER TABLE inventory_batches ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
 
----
+-- Orders (org-specific) — invoice number unique per org
+ALTER TABLE orders ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_invoice_number_key;
+ALTER TABLE orders ADD CONSTRAINT unique_invoice_per_org UNIQUE (org_id, invoice_number);
 
-### Story 7.3: Authentication & Org-Scoped Data Isolation
+-- Order Items (org-specific)
+ALTER TABLE order_items ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
 
-**As a** platform developer,
-**I want** the authentication system to enforce org-level data isolation,
-**So that** users can only access their own organization's data.
+-- Stock Movements (org-specific)
+ALTER TABLE stock_movements ADD COLUMN org_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
 
-**Acceptance Criteria:**
+-- Indexes for performance
+CREATE INDEX idx_users_org ON users(org_id);
+CREATE INDEX idx_roles_org ON roles(org_id);
+CREATE INDEX idx_units_org ON units(org_id);
+CREATE INDEX idx_products_org ON products(org_id);
+CREATE INDEX idx_customers_org ON customers(org_id);
+CREATE INDEX idx_batches_org ON inventory_batches(org_id);
+CREATE INDEX idx_orders_org ON orders(org_id);
+CREATE INDEX idx_order_items_org ON order_items(org_id);
+CREATE INDEX idx_movements_org ON stock_movements(org_id);
+```
 
-#### Login Changes
-- Login response includes: user info + `org_id` + org settings (logo, colors, header_text)
-- JWT token payload includes: `user_id`, `role`, `org_id`
-- Super_admin has `org_id = null` (platform-level, not tied to any org)
-- If org `is_active = false`, block login for all users in that org with message: "Your organization account is inactive. Contact support."
+### Data Migration (Existing Data)
 
-#### Middleware Changes
-- `authenticate` middleware extracts `org_id` from JWT and attaches to `req.user`
-- New `injectOrgId` middleware: automatically adds `org_id` to all DB queries for non-super_admin users
-- All API endpoints (products, customers, batches, orders, inventory) filter by `req.user.org_id`
-- Super_admin bypasses org filtering (can optionally view any org's data with `?org_id=` query param)
+```sql
+-- 1. Create a default org for existing data
+INSERT INTO organizations (org_code, org_name, org_email)
+VALUES ('GREE-001', 'GREE Marketing India LLP', 'admin@greebond.com')
+RETURNING id;
 
-#### Data Isolation Rules
-- INSERT operations: `org_id` is always set from `req.user.org_id` (not from request body — prevents spoofing)
-- SELECT operations: `WHERE org_id = $X` added to all queries
-- UPDATE/DELETE operations: `WHERE id = $X AND org_id = $Y` to prevent cross-org modification
-- Order invoice numbering is per-org: `INV-0001` resets for each org
+-- 2. Assign all existing data to default org
+UPDATE users SET org_id = '<default-org-id>' WHERE is_super_admin = false;
+UPDATE roles SET org_id = '<default-org-id>';
+UPDATE units SET org_id = '<default-org-id>';
+UPDATE products SET org_id = '<default-org-id>';
+UPDATE customers SET org_id = '<default-org-id>';
+UPDATE inventory_batches SET org_id = '<default-org-id>';
+UPDATE orders SET org_id = '<default-org-id>';
+UPDATE order_items SET org_id = '<default-org-id>';
+UPDATE stock_movements SET org_id = '<default-org-id>';
 
----
+-- 3. Make org_id NOT NULL
+ALTER TABLE users ALTER COLUMN org_id SET NOT NULL; -- except super_admin (org_id IS NULL)
+ALTER TABLE roles ALTER COLUMN org_id SET NOT NULL;
+ALTER TABLE units ALTER COLUMN org_id SET NOT NULL;
+ALTER TABLE products ALTER COLUMN org_id SET NOT NULL;
+ALTER TABLE customers ALTER COLUMN org_id SET NOT NULL;
+ALTER TABLE inventory_batches ALTER COLUMN org_id SET NOT NULL;
+ALTER TABLE orders ALTER COLUMN org_id SET NOT NULL;
+ALTER TABLE order_items ALTER COLUMN org_id SET NOT NULL;
+ALTER TABLE stock_movements ALTER COLUMN org_id SET NOT NULL;
+```
 
-### Story 7.4: Org Admin Experience
-
-**As an** org_admin,
-**I want** to manage my organization's inventory with full feature access and custom branding,
-**So that** I can use the system as my own company's tool.
-
-**Acceptance Criteria:**
-
-#### Access & Permissions
-- Org admin has access to: Dashboard, Products, Customers, Batches, Orders, Stock Reports, Movements
-- Org admin does NOT have access to: User Management, Organization Management
-- Org admin does NOT see other orgs' data — everything is scoped
-- Org admin cannot create new users (only platform owner can)
-
-#### Settings Page (new)
-- Org admin sees a "Settings" option in sidebar
-- Settings page allows updating:
-  - **Company Logo**: Upload image (stored locally or base64), displayed in sidebar header and printed invoices
-  - **Header Text**: Company name displayed in the sidebar/header (replaces default "GREE Inventory")
-  - **Primary Color**: Color picker for main accent color (buttons, active nav items, focus rings) — default yellow-500
-  - **Secondary Color**: Color picker for sidebar/header background — default gray-800
-- Changes apply immediately (preview before save)
-- Settings are stored in the `organizations` table
-- Logo upload: accept PNG/JPG, max 2MB, store in `/uploads/logos/` or as base64 in DB
-
-#### Branding Application
-- Sidebar header shows org's logo + header_text (instead of hardcoded "GREE Inventory")
-- Primary color replaces all yellow-500 accent colors across the app
-- Secondary color replaces sidebar/header background
-- Login page shows a generic/neutral brand (platform brand), not org-specific
-- After login, the theme switches to the user's org branding
-
----
-
-### Story 7.5: Inventory User Experience
-
-**As an** inventory user within an organization,
-**I want** to access the inventory management features scoped to my org,
-**So that** I can do my daily inventory tasks.
-
-**Acceptance Criteria:**
-- Inventory user has access to: Dashboard, Products, Customers, Batches, Orders, Stock Reports, Movements
-- Inventory user does NOT have access to: Settings, User Management, Organization Management
-- Inventory user sees the same org branding (logo, colors, header) as the org_admin
-- All data is scoped to their org_id automatically
-- Cannot see or modify org settings
+### Acceptance Criteria
+- [ ] `organizations` table created
+- [ ] `org_id` column added to all 9 tables
+- [ ] Existing data migrated to default org
+- [ ] Super admin user has `org_id = NULL` and `is_super_admin = true`
+- [ ] Unique constraints updated to be per-org (product_code, email, role name, unit name, invoice number)
+- [ ] All indexes created
 
 ---
 
-### Story 7.6: Org-Scoped API Updates (All Existing Endpoints)
+## Story 7.2: Super Admin — Organization Management
+
+**As a** super admin,
+**I want** a dedicated panel to create and manage organizations,
+**So that** I can onboard new clients with isolated data environments.
+
+### Backend: `POST /api/orgs`
+
+Creates a new org + the first org admin user in one transaction:
+
+**Request body:**
+```json
+{
+  "org_name": "ABC Company",
+  "org_code": "ABC-001",
+  "org_email": "admin@abc.com",
+  "org_phone": "9876543210",
+  "address": "...",
+  "admin_name": "ABC Admin",
+  "admin_password": "securepassword"
+}
+```
+
+**What it does (in one transaction):**
+1. Insert into `organizations`
+2. Create default roles for that org: `admin`, `inventory` (with standard capabilities)
+3. Create default units for that org: `Box`, `PCS`, `KG`, `MTR`, `LTR` (configurable)
+4. Create the first user with `role = admin`, `org_id = new org id`
+
+**Response:**
+```json
+{
+  "org": { "id": "...", "org_code": "ABC-001", "org_name": "ABC Company" },
+  "admin_user": { "email": "admin@abc.com", "name": "ABC Admin" },
+  "message": "Organization created successfully"
+}
+```
+
+### Backend: Other Org Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/orgs` | List all orgs (super_admin only) |
+| GET | `/api/orgs/:id` | Get org details |
+| PUT | `/api/orgs/:id` | Update org (name, phone, address, is_active) |
+| GET | `/api/orgs/:id/users` | List users in an org |
+
+### Frontend: Super Admin Panel
+
+- Dedicated `/orgs` page (only visible to super_admin)
+- Table: org_code, org_name, org_email, user count, status (active/inactive), created date
+- "Create Org" button → modal/form with fields: org_name, org_code, org_email, org_phone, address, admin name, admin password
+- After creation: show success with the admin credentials
+- Toggle org active/inactive
+
+### Acceptance Criteria
+- [ ] `POST /api/orgs` creates org + default roles + default units + admin user atomically
+- [ ] `GET /api/orgs` returns all orgs (super_admin only, 403 for others)
+- [ ] `PUT /api/orgs/:id` updates org details
+- [ ] Super admin UI: org list page with create form
+- [ ] Org creation generates default roles and units automatically
+- [ ] Deactivating an org blocks all users of that org from logging in
+
+---
+
+## Story 7.3: Authentication & Org Isolation Middleware
 
 **As a** developer,
-**I want** all existing API endpoints to be org-scoped,
-**So that** data isolation is enforced at every level.
+**I want** the auth system to enforce org-level isolation on every request,
+**So that** users can never access data outside their org.
 
-**Acceptance Criteria:**
+### Login Changes
 
-#### Products API (`/api/products`)
-- GET: Returns only products where `org_id = req.user.org_id`
-- POST: Sets `org_id` from authenticated user
-- PUT/DELETE: Validates `org_id` match before modification
-- Categories endpoint scoped to org
+**Current JWT payload:**
+```json
+{ "id": "...", "email": "...", "role": "admin", "name": "..." }
+```
 
-#### Customers API (`/api/customers`)
-- All CRUD operations scoped to org_id
-- Customer name uniqueness scoped per org (two orgs can have same customer name)
+**New JWT payload:**
+```json
+{
+  "id": "...",
+  "email": "...",
+  "role": "admin",
+  "name": "...",
+  "org_id": "...",
+  "org_code": "ABC-001",
+  "org_name": "ABC Company",
+  "is_super_admin": false
+}
+```
 
-#### Batches API (`/api/batches`)
-- All endpoints scoped: batches, stock entries, bulk creation
-- Batch number auto-generation scoped per org
-- Product lookup for batches scoped to org
+**Login response also includes:**
+```json
+{
+  "token": "...",
+  "user": { ...user data with org info... }
+}
+```
 
-#### Orders API (`/api/orders`)
-- All endpoints scoped
-- Invoice number generation scoped per org (each org starts from INV-0001)
-- Stock deduction only from org's own batches
+**Login rules:**
+- If org `is_active = false` → block login: "Your organization is inactive. Contact support."
+- Super admin (`is_super_admin = true`) → always allowed, org_id = null in token
+- Normal users → org_id always included in token
 
-#### Inventory/Dashboard API
-- Stock report scoped to org
-- Dashboard stats scoped to org
-- Low stock alerts scoped to org
+### Middleware
+
+**`authenticate` middleware (updated):**
+- Verify JWT
+- Attach `req.user` with org_id, org_code, is_super_admin
+- If org is deactivated (re-check in DB) → 403
+
+**`requireSuperAdmin` middleware (new):**
+- Checks `req.user.is_super_admin === true`
+- Used on `/api/orgs/*` routes
+
+**All existing controllers updated:**
+- Every query adds `AND org_id = $X` using `req.user.org_id`
+- INSERT always sets `org_id = req.user.org_id` from token (never from body)
+- UPDATE/DELETE adds `AND org_id = $X` to prevent cross-org modification
+
+### Acceptance Criteria
+- [ ] JWT includes `org_id`, `org_code`, `org_name`, `is_super_admin`
+- [ ] `requireSuperAdmin` middleware created and applied to `/api/orgs/*`
+- [ ] All existing controllers filter by `org_id`
+- [ ] Login blocked if org is inactive
+- [ ] Super admin has no org_id restriction
 
 ---
 
-### Story 7.7: Frontend Multi-Tenant Integration
+## Story 7.4: Org-Scoped All Existing API Endpoints
+
+**As a** developer,
+**I want** every existing API endpoint to be scoped to the authenticated user's org,
+**So that** data isolation is enforced at the database level.
+
+### Controllers to Update
+
+| Controller | Changes Required |
+|---|---|
+| `productController.js` | Add `org_id` filter to all queries; set `org_id` on create |
+| `customerController.js` | Add `org_id` filter; set on create |
+| `batchController.js` | Add `org_id` filter to all batch + stock movement queries |
+| `orderController.js` | Add `org_id` filter; invoice number generation per org |
+| `inventoryController.js` | Add `org_id` to all report/stock queries |
+| `dashboardController.js` | Add `org_id` to all dashboard stats queries |
+| `userController.js` | Scope to org_id; only create users within own org |
+| `unitController.js` | Add `org_id` filter; set on create |
+| `roleController.js` | Add `org_id` filter; set on create |
+
+### Special Cases
+
+**Invoice number generation (per-org):**
+```sql
+-- Generate next invoice number scoped to org
+SELECT invoice_number FROM orders
+WHERE org_id = $1
+ORDER BY created_at DESC LIMIT 1
+```
+
+**Voucher number generation (per-org):**
+```sql
+SELECT voucher_number FROM stock_movements
+WHERE org_id = $1 AND voucher_number IS NOT NULL
+ORDER BY created_at DESC LIMIT 1
+```
+
+**Product categories (per-org):**
+```sql
+SELECT DISTINCT category FROM products
+WHERE org_id = $1 AND category IS NOT NULL
+ORDER BY category ASC
+```
+
+**Low stock check (per-org):**
+```sql
+HAVING SUM(ib.quantity_remaining) < p.low_stock_threshold
+WHERE p.org_id = $1
+```
+
+### Acceptance Criteria
+- [ ] All 9 controllers updated with org_id filtering
+- [ ] Invoice/voucher number generation is per-org (each org starts from 0001)
+- [ ] Product categories scoped per org
+- [ ] Dashboard stats only show org's own data
+- [ ] Stock reports only show org's own products
+- [ ] Creating any resource (product, customer, batch, order) stores org_id from token
+
+---
+
+## Story 7.5: Org Admin — User & Role Management Within Org
+
+**As an** org admin,
+**I want** to manage users and roles within my own org,
+**So that** I can control who accesses what in my organization.
+
+### User Management (Org-scoped)
+
+- Org admin can create/edit/deactivate users within their org only
+- Users are created with a role from the org's own roles list
+- Cannot create users in another org
+- Cannot assign super_admin role
+
+### Role Management (Org-scoped)
+
+- Org admin can create custom roles with specific capabilities
+- Default roles (`admin`, `inventory`) created automatically when org is created
+- Org admin can modify capabilities of non-system roles
+- System roles (`admin`, `inventory`) cannot be deleted
+
+### Unit Management (Org-scoped)
+
+- Org admin can add/edit/delete units for their org
+- Default units created when org is created: `Box`, `PCS`, `KG`, `MTR`, `LTR`
+- Units from other orgs are never visible
+
+### Acceptance Criteria
+- [ ] User management CRUD scoped to org
+- [ ] Role management CRUD scoped to org
+- [ ] Unit management CRUD scoped to org
+- [ ] Default roles + units auto-created on org creation
+- [ ] Org admin cannot see/modify other orgs' users/roles/units
+
+---
+
+## Story 7.6: Frontend — Auth Context & Org Awareness
 
 **As a** frontend developer,
-**I want** the React app to dynamically adapt to the logged-in user's org context,
-**So that** each org sees their own branded experience.
+**I want** the React app to store and use org context from login,
+**So that** the UI correctly reflects the user's organization.
 
-**Acceptance Criteria:**
+### AuthContext Updates
 
-#### Auth Context Updates
-- `AuthContext` stores: user, org_id, org_settings (logo, colors, header_text, org_name)
-- On login, fetch and cache org settings
-- Provide `useOrg()` hook or extend `useAuth()` with org data
+```javascript
+// Store from login response
+const [user, setUser] = useState(null); // includes org_id, org_code, org_name, is_super_admin
+const [token, setToken] = useState(localStorage.getItem('token'));
 
-#### Dynamic Theming
-- CSS custom properties (variables) set from org settings:
-  ```css
-  :root {
-    --color-primary: #EAB308;      /* from org.primary_color */
-    --color-secondary: #1F2937;    /* from org.secondary_color */
-  }
-  ```
-- All components use CSS variables instead of hardcoded Tailwind colors
-- Theme updates on login and when settings are changed
+// Login sets user with full org info
+// user.org_code, user.org_name, user.is_super_admin all available
+```
 
-#### Layout Changes
-- Sidebar header: shows org logo (if uploaded) + org header_text
-- Falls back to default platform logo/text if not set
-- Super admin sees "Platform Admin" branding (not org-specific)
+### Layout Updates
 
-#### Route Guards
-- Super admin routes: `/orgs`, `/orgs/new`, `/orgs/:id/edit`, `/users` (all orgs)
-- Org admin routes: `/settings` (own org only)
-- Shared routes: `/dashboard`, `/products`, `/customers`, `/batches`, `/orders`, etc.
-- Role-based sidebar: super_admin sees org management; org_admin sees settings; inventory sees neither
+- Sidebar shows `org_name` instead of hardcoded "GREE Inventory" (for org users)
+- Sidebar shows "Platform Admin" for super admin
+- Super admin sees only: Dashboard (platform stats), Organizations, Logout
+- Org admin/users see: Dashboard, Products, Customers, Material In, Material Out, Reports, Users (org), Roles (org), Units (org)
 
-#### API Integration
-- No changes needed in `api.js` — the JWT token carries org_id, backend handles scoping
-- Frontend never sends org_id in request body (prevents spoofing)
+### Route Guards
+
+| Route | Access |
+|---|---|
+| `/orgs` | super_admin only |
+| `/orgs/new` | super_admin only |
+| `/dashboard` | all authenticated |
+| `/products*` | org users (by capability) |
+| `/customers*` | org users (by capability) |
+| `/batches*` | org users (by capability) |
+| `/orders*` | org users (by capability) |
+| `/users` | org admin (within org) |
+| `/roles` | org admin (within org) |
+| `/units` | org admin (within org) |
+
+### Acceptance Criteria
+- [ ] AuthContext stores `org_name`, `org_code`, `is_super_admin`
+- [ ] Sidebar dynamically shows org_name from auth context
+- [ ] Super admin only sees org management routes
+- [ ] Org users only see their org's routes
+- [ ] `/orgs` page is hidden from non-super-admin users
+- [ ] After login, user is directed to correct dashboard based on role
 
 ---
 
 ## Implementation Order
 
-| Phase | Story | Description | Effort |
-|-------|-------|-------------|--------|
-| 1 | 7.1 | Database schema migration (add org_id everywhere) | Medium |
-| 2 | 7.3 | Auth + middleware changes (JWT org_id, data isolation) | Medium |
-| 3 | 7.6 | Update ALL existing API endpoints with org scoping | Large |
-| 4 | 7.2 | Super admin panel (org CRUD + user management) | Large |
-| 5 | 7.4 | Org admin settings page (branding/theme) | Medium |
-| 6 | 7.7 | Frontend multi-tenant integration (dynamic theme, route guards) | Large |
-| 7 | 7.5 | Inventory user experience validation | Small |
+| Phase | Story | Description | Priority |
+|-------|-------|-------------|----------|
+| 1 | 7.1 | DB schema migration — add org_id to all tables | Critical |
+| 2 | 7.3 | Auth + middleware — JWT org_id, isolation middleware | Critical |
+| 3 | 7.4 | Update all existing controllers with org_id filtering | Critical |
+| 4 | 7.2 | Super admin panel — org creation + management | High |
+| 5 | 7.5 | Org admin — user/role/unit management within org | High |
+| 6 | 7.6 | Frontend — auth context, layout, route guards | High |
 
 ---
 
-## Data Migration Strategy
+## Security Rules
 
-Since this is a fresh/POC application, the migration approach is:
-
-1. Create `organizations` table
-2. Create a default org (e.g., "GREE Marketing India LLP") and a platform org for super_admin
-3. Add `org_id` column to all tables (nullable initially)
-4. Assign existing data to the default org
-5. Make `org_id` NOT NULL after migration
-6. Create super_admin user (platform-level, org_id = NULL)
-7. Reassign existing admin/inventory users to the default org
-
----
-
-## Security Considerations
-
-- **org_id injection**: Always derived from JWT, never from request body
-- **Cross-org access**: Every query includes org_id filter; tested with multi-org scenarios
-- **Super admin scope**: Can view all orgs but actions are explicit (must select org)
-- **Inactive org blocking**: Checked at login AND at middleware level (in case org is deactivated while user has active session)
-- **File uploads (logo)**: Validated file type, size limit (2MB), stored with org_id prefix to prevent collision
-- **Invoice number isolation**: Per-org sequence prevents information leakage about other orgs' order volumes
-
----
-
-## API Endpoints Summary (New)
-
-| Method | Endpoint | Access | Description |
-|--------|----------|--------|-------------|
-| GET | `/api/orgs` | super_admin | List all organizations |
-| POST | `/api/orgs` | super_admin | Create new org + org_admin user |
-| GET | `/api/orgs/:id` | super_admin | Get org details |
-| PUT | `/api/orgs/:id` | super_admin | Update org (plan, status, details) |
-| DELETE | `/api/orgs/:id` | super_admin | Deactivate org |
-| GET | `/api/orgs/:id/users` | super_admin | List users for an org |
-| POST | `/api/orgs/:id/users` | super_admin | Create user for an org |
-| GET | `/api/settings` | org_admin | Get own org settings |
-| PUT | `/api/settings` | org_admin | Update own org settings (logo, colors, header) |
-| POST | `/api/settings/logo` | org_admin | Upload org logo |
-
----
-
-## UI Wireframe Notes
-
-### Super Admin Sidebar
-```
-[Platform Logo]
-Platform Admin
----
-Dashboard (platform stats)
-Organizations
-Users (all orgs)
----
-Logout
-```
-
-### Org Admin / Inventory User Sidebar
-```
-[Org Logo / Default]
-[Org Header Text]
----
-Dashboard
-Products
-Customers
-Batches
-Movements
-Orders
-Reports
----
-Settings (org_admin only)
----
-Logout
-```
-
-### Login Page
-- Neutral/platform branding
-- Email + Password
-- No org selection needed (email determines org via user lookup)
-- After login, theme immediately applies based on org settings
+- `org_id` is NEVER accepted from request body — always from JWT
+- Every UPDATE/DELETE includes `AND org_id = $X` to prevent cross-org tampering
+- Super admin endpoints protected by `requireSuperAdmin` middleware
+- Inactive org → login blocked + 403 on all API calls mid-session
+- Product codes, invoice numbers, voucher numbers are unique **per org** only
