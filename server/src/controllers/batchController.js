@@ -3,7 +3,10 @@ const pool = require('../config/db');
 // Generate next voucher number: MI-0001, MI-0002, ...
 const generateVoucherNumber = async (client) => {
   const last = await client.query(
-    "SELECT voucher_number FROM stock_movements WHERE voucher_number IS NOT NULL ORDER BY created_at DESC LIMIT 1"
+    `SELECT voucher_number FROM stock_movements
+     WHERE voucher_number IS NOT NULL
+     ORDER BY CAST(REGEXP_REPLACE(voucher_number, '^(VCH-|MI-)', '', 'g') AS INTEGER) DESC
+     LIMIT 1`
   );
   let nextNumber = 1;
   if (last.rows.length > 0) {

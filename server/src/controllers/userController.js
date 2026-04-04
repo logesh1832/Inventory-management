@@ -20,8 +20,9 @@ const createUser = async (req, res, next) => {
       return res.status(400).json({ error: { message: 'Name, email, password, and role are required.' } });
     }
 
-    if (!['admin', 'inventory'].includes(role)) {
-      return res.status(400).json({ error: { message: 'Invalid role. Must be admin or inventory.' } });
+    const roleCheck = await pool.query('SELECT name FROM roles WHERE name = $1 AND is_active = true', [role]);
+    if (roleCheck.rows.length === 0) {
+      return res.status(400).json({ error: { message: `Invalid role: "${role}". Must be an existing active role.` } });
     }
 
     if (password.length < 6) {
@@ -56,6 +57,11 @@ const updateUser = async (req, res, next) => {
 
     if (!name || !email || !role) {
       return res.status(400).json({ error: { message: 'Name, email, and role are required.' } });
+    }
+
+    const roleCheck = await pool.query('SELECT name FROM roles WHERE name = $1 AND is_active = true', [role]);
+    if (roleCheck.rows.length === 0) {
+      return res.status(400).json({ error: { message: `Invalid role: "${role}". Must be an existing active role.` } });
     }
 
     // Check duplicate email (excluding current user)

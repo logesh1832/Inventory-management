@@ -1,3 +1,18 @@
+## ⚠️ Production Database Rule (STRICTEST — ABSOLUTELY NO EXCEPTIONS)
+
+- NEVER run any write operation on the production DB (INSERT, UPDATE, DELETE, ALTER, DROP, TRUNCATE) without first:
+  1. Stating the exact SQL query that will be executed
+  2. Explaining what data will be affected and how many rows
+  3. Waiting for the user to explicitly confirm ("yes", "go ahead", etc.)
+  4. Only then executing
+- This applies to ALL production DB changes — no matter how small or "safe" they seem.
+- Read-only queries (SELECT) on production are allowed without asking.
+- NEVER assume a production DB change is safe to auto-run. Always stop and confirm.
+- If unsure whether a DB is production or local, treat it as production and ask first.
+- Production DB credentials (host: 207.180.200.243) must NEVER be used for write operations without explicit user approval per query.
+
+---
+
 ## Git Safety Rule (STRICT — NO EXCEPTIONS)
 
 - NEVER run any git write command without asking the user first and getting explicit approval.
