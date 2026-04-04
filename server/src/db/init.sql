@@ -233,6 +233,19 @@ BEGIN
 END $$;
 
 -- ============================================
+-- Migration: drop hardcoded role check constraint on users table
+-- ============================================
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'users_role_check' AND table_name = 'users'
+    ) THEN
+        ALTER TABLE users DROP CONSTRAINT users_role_check;
+    END IF;
+END $$;
+
+-- ============================================
 -- Migration: create units table and seed defaults
 -- ============================================
 DO $$
