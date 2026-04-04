@@ -32,6 +32,11 @@ const login = async (req, res, next) => {
       return res.status(403).json({ error: { message: 'Salesperson accounts are not permitted to login. Contact admin.' } });
     }
 
+    // Block users with no org assigned (non-super-admin)
+    if (!user.is_super_admin && !user.org_id) {
+      return res.status(403).json({ error: { message: 'Your account is not assigned to any organization. Contact your administrator.' } });
+    }
+
     const validPassword = await bcrypt.compare(password, user.password_hash);
     if (!validPassword) {
       return res.status(401).json({ error: { message: 'Invalid email or password.' } });
