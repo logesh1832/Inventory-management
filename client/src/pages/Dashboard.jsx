@@ -38,14 +38,18 @@ export default function Dashboard() {
   if (loading) return <p className="text-gray-500">Loading...</p>;
   if (!data) return <p className="text-red-500">Failed to load dashboard.</p>;
 
+  const caps = user?.capabilities || [];
+  const hasAdmin = user?.role === 'admin';
+  const has = (cap) => hasAdmin || caps.includes(cap);
+
   const cards = [
-    { label: 'Total Products', value: data.total_products, color: 'bg-blue-500', link: '/products' },
-    { label: 'Total Material In', value: data.total_material_in || 0, color: 'bg-green-500', link: '/batches' },
-    { label: 'Total Material Out', value: data.total_orders, color: 'bg-indigo-500', link: '/orders' },
-    { label: 'Low Stock Alerts', value: data.low_stock_count, color: data.low_stock_count > 0 ? 'bg-red-500' : 'bg-gray-400', link: '/stock-report' },
+    { label: 'Total Products', value: data.total_products, color: 'bg-blue-500', link: has('products') ? '/products' : null },
+    { label: 'Total Material In', value: data.total_material_in || 0, color: 'bg-green-500', link: has('material_in') ? '/batches' : null },
+    { label: 'Total Material Out', value: data.total_orders, color: 'bg-indigo-500', link: has('material_out') ? '/orders' : null },
+    { label: 'Low Stock Alerts', value: data.low_stock_count, color: data.low_stock_count > 0 ? 'bg-red-500' : 'bg-gray-400', link: has('reports') ? '/stock-report' : null },
   ];
 
-  if (user?.role === 'admin') {
+  if (hasAdmin) {
     cards.push(
       { label: 'Total Users', value: data.total_users, color: 'bg-teal-500', link: '/users' },
     );
@@ -61,7 +65,7 @@ export default function Dashboard() {
           <div
             key={card.label}
             onClick={() => card.link && navigate(card.link)}
-            className="bg-white rounded-lg shadow p-4 cursor-pointer hover:shadow-md transition-shadow"
+            className={`bg-white rounded-lg shadow p-4 transition-shadow ${card.link ? 'cursor-pointer hover:shadow-md' : 'cursor-default'}`}
           >
             <p className="text-xs text-gray-500 mb-1 text-center">{card.label}</p>
             <p className="font-bold text-gray-800 text-center text-3xl">{card.value}</p>
