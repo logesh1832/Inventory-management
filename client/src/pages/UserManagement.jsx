@@ -1,6 +1,20 @@
 import { useState, useEffect } from 'react';
 import api from '../services/api';
 
+const generatePassword = () => {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghjkmnpqrstuvwxyz';
+  const digits = '23456789';
+  const special = '@#$!';
+  const all = upper + lower + digits + special;
+  let pwd = upper[Math.floor(Math.random() * upper.length)]
+    + lower[Math.floor(Math.random() * lower.length)]
+    + digits[Math.floor(Math.random() * digits.length)]
+    + special[Math.floor(Math.random() * special.length)];
+  for (let i = 0; i < 4; i++) pwd += all[Math.floor(Math.random() * all.length)];
+  return pwd.split('').sort(() => Math.random() - 0.5).join('');
+};
+
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -9,6 +23,10 @@ export default function UserManagement() {
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'inventory', phone: '' });
+  const [generatedPassword, setGeneratedPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
   const [roles, setRoles] = useState([]);
@@ -32,13 +50,22 @@ export default function UserManagement() {
 
   const openAddModal = () => {
     setEditingUser(null);
-    setFormData({ name: '', email: '', password: '', role: 'inventory', phone: '' });
+    const pwd = generatePassword();
+    setGeneratedPassword(pwd);
+    setConfirmPassword(pwd);
+    setShowPassword(false);
+    setShowConfirm(false);
+    setFormData({ name: '', email: '', password: pwd, role: roles[0]?.name || 'inventory', phone: '' });
     setFormError('');
     setShowModal(true);
   };
 
   const openEditModal = (user) => {
     setEditingUser(user);
+    setGeneratedPassword('');
+    setConfirmPassword('');
+    setShowPassword(false);
+    setShowConfirm(false);
     setFormData({ name: user.name, email: user.email, password: '', role: user.role, phone: user.phone || '' });
     setFormError('');
     setShowModal(true);
@@ -47,6 +74,10 @@ export default function UserManagement() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
+    if (formData.phone && formData.phone.length !== 10) {
+      setFormError('Enter a valid 10-digit Indian mobile number.');
+      return;
+    }
     setSaving(true);
     try {
       if (editingUser) {
@@ -56,6 +87,11 @@ export default function UserManagement() {
       } else {
         if (!formData.password) {
           setFormError('Password is required for new users.');
+          setSaving(false);
+          return;
+        }
+        if (formData.password !== confirmPassword) {
+          setFormError('Passwords do not match.');
           setSaving(false);
           return;
         }
@@ -232,10 +268,59 @@ export default function UserManagement() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Password {editingUser && <span className="text-gray-400 font-normal">(leave blank to keep current)</span>}
                 </label>
-                <input type="password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  {...(!editingUser && { required: true })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+                <div className="relative">
+                  <input type={showPassword ? 'text' : 'password'} value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    {...(!editingUser && { required: true })}
+                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 font-mono" />
+                  <button type="button" tabIndex={-1} onClick={() => setShowPassword((v) => !v)}
+                    className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600">
+                    {showPassword ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+                {!editingUser && generatedPassword && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Default password: <span className="font-semibold text-gray-700 font-mono">{generatedPassword}</span>
+                    <span className="text-gray-400 ml-1">(share this with the user)</span>
+                  </p>
+                )}
               </div>
+              {!editingUser && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+                  <div className="relative">
+                    <input type={showConfirm ? 'text' : 'password'} value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                      className={`w-full px-3 py-2 pr-10 border rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 font-mono ${confirmPassword && formData.password !== confirmPassword ? 'border-red-400' : 'border-gray-300'}`} />
+                    <button type="button" tabIndex={-1} onClick={() => setShowConfirm((v) => !v)}
+                      className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600">
+                      {showConfirm ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                        </svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                  {confirmPassword && formData.password !== confirmPassword && (
+                    <p className="mt-1 text-xs text-red-500">Passwords do not match.</p>
+                  )}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                 <select value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })}
@@ -247,8 +332,16 @@ export default function UserManagement() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                <input type="text" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500" />
+                <input type="tel" value={formData.phone}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setFormData({ ...formData, phone: val });
+                  }}
+                  placeholder="10-digit mobile number"
+                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 ${formData.phone && formData.phone.length !== 10 ? 'border-red-400' : 'border-gray-300'}`} />
+                {formData.phone && formData.phone.length !== 10 && (
+                  <p className="mt-1 text-xs text-red-500">Must be 10 digits.</p>
+                )}
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowModal(false)}
