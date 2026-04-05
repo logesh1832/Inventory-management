@@ -50,12 +50,16 @@ const getInventoryDashboard = async (req, res, next) => {
          ORDER BY sm.created_at DESC LIMIT 5`
       ),
       pool.query(
-        `SELECT p.id AS product_id, p.product_name, p.product_code, p.unit,
-                COALESCE(SUM(ib.quantity_remaining), 0)::int AS total_stock
+        `SELECT p.id AS product_id, p.product_name, p.product_code, p.unit, p.sub_unit, p.qty_per_box, p.low_stock_threshold,
+                CASE
+                  WHEN p.sub_unit IS NOT NULL AND p.qty_per_box IS NOT NULL AND p.qty_per_box > 0
+                  THEN FLOOR(COALESCE(SUM(ib.quantity_remaining), 0)::numeric / p.qty_per_box)::int
+                  ELSE COALESCE(SUM(ib.quantity_remaining), 0)::int
+                END AS total_stock
          FROM products p
          LEFT JOIN inventory_batches ib ON ib.product_id = p.id
          WHERE p.status = 'active'
-         GROUP BY p.id, p.product_name, p.product_code, p.unit
+         GROUP BY p.id, p.product_name, p.product_code, p.unit, p.sub_unit, p.qty_per_box, p.low_stock_threshold
          ORDER BY p.product_name ASC`
       ),
       pool.query("SELECT COUNT(*)::int AS count FROM users WHERE is_active = true"),
