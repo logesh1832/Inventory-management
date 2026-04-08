@@ -296,7 +296,7 @@ const getBatchesByProduct = async (req, res, next) => {
       `SELECT b.*, p.product_name
        FROM inventory_batches b
        JOIN products p ON p.id = b.product_id
-       WHERE b.product_id = $1
+       WHERE b.product_id = $1 AND b.quantity_remaining > 0
        ORDER BY b.received_date DESC`,
       [product_id]
     );
