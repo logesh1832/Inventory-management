@@ -743,9 +743,15 @@ export default function OrderForm() {
                           const allocProd = products.find((p) => p.id === item.product_id);
                           const batchAvailDisplay = (b) => {
                             if (allocProd && allocProd.sub_unit && allocProd.qty_per_box) {
-                              return item.qty_unit === 'boxes'
-                                ? `${Math.floor(b.adjusted_remaining / allocProd.qty_per_box)} ${allocProd.unit}`
-                                : `${b.adjusted_remaining} ${allocProd.sub_unit}`;
+                              if (item.qty_unit === 'boxes') {
+                                const boxes = Math.floor(b.adjusted_remaining / allocProd.qty_per_box);
+                                const pcs = b.adjusted_remaining % allocProd.qty_per_box;
+                                if (boxes === 0) return `${pcs} ${allocProd.sub_unit}`;
+                                return pcs > 0
+                                  ? `${boxes} ${allocProd.unit} + ${pcs} ${allocProd.sub_unit}`
+                                  : `${boxes} ${allocProd.unit}`;
+                              }
+                              return `${b.adjusted_remaining} ${allocProd.sub_unit}`;
                             }
                             return `${b.adjusted_remaining}`;
                           };
