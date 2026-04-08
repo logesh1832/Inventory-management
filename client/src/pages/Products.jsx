@@ -55,7 +55,7 @@ export default function Products() {
   const filtered = products.filter((p) => {
     if (!search) return true;
     const term = search.toLowerCase();
-    return p.product_name.toLowerCase().includes(term) || p.product_code.toLowerCase().includes(term);
+    return (p.product_name?.toLowerCase() || '').includes(term) || (p.product_code?.toLowerCase() || '').includes(term);
   });
 
   if (loading) {

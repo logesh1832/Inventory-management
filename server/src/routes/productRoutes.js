@@ -8,7 +8,7 @@ const {
   updateProduct,
   deleteProduct,
 } = require('../controllers/productController');
-const { requireRole } = require('../middleware/auth');
+const { requireCapability } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 
 // All users can read products
@@ -16,9 +16,9 @@ router.get('/', getAllProducts);
 router.get('/categories', getCategories);
 router.get('/:id', getProductById);
 
-// Only admin/inventory can modify
-router.post('/', requireRole('admin', 'inventory'), upload.single('image'), createProduct);
-router.put('/:id', requireRole('admin', 'inventory'), upload.single('image'), updateProduct);
-router.delete('/:id', requireRole('admin', 'inventory'), deleteProduct);
+// Capability-based: any role with 'products' capability can modify
+router.post('/', requireCapability('products'), upload.single('image'), createProduct);
+router.put('/:id', requireCapability('products'), upload.single('image'), updateProduct);
+router.delete('/:id', requireCapability('products'), deleteProduct);
 
 module.exports = router;
