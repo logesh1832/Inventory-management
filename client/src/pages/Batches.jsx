@@ -186,7 +186,7 @@ export default function Batches() {
         <div className="w-full sm:w-56">
           <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
           <SearchableSelect
-            options={products.map((p) => ({ value: p.id, label: p.product_name, sublabel: p.product_code }))}
+            options={products.map((p) => ({ value: p.id, label: p.product_name }))}
             value={filterProductId}
             onChange={setFilterProductId}
             placeholder="All Products"

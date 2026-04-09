@@ -175,7 +175,7 @@ export default function MaterialInDetail() {
                 <tr key={e.id}>
                   <td className="py-1 px-2 text-xs text-gray-600 align-top border border-gray-300">{idx + 1}</td>
                   <td className="py-1 px-2 text-[11px] text-gray-800 align-top border border-gray-300">
-                    {e.product_code} - {e.product_name}
+                    {e.product_name}
                   </td>
                   <td className="py-1 px-2 text-[10px] text-gray-600 align-top border border-gray-300">{e.batch_number || '—'}</td>
                   <td className="py-1 px-2 text-xs text-right align-top border border-gray-300">
@@ -213,7 +213,6 @@ export default function MaterialInDetail() {
                 <tr key={e.id} className="hover:bg-gray-50">
                   <td className="px-4 py-2 text-sm">
                     <span className="font-medium text-gray-800">{e.product_name}</span>
-                    <span className="text-gray-400 text-xs ml-1">({e.product_code})</span>
                   </td>
                   <td className="px-4 py-2 text-sm">
                     {e.batch_number ? (

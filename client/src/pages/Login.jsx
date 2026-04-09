@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
@@ -95,6 +96,12 @@ export default function Login() {
                 )}
               </button>
             </div>
+          </div>
+
+          <div className="flex justify-end -mt-2">
+            <Link to="/forgot-password" className="text-xs text-yellow-500 hover:underline">
+              Forgot password?
+            </Link>
           </div>
 
           <button

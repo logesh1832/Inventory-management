@@ -1,7 +1,9 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const pool = require('../config/db');
 const { JWT_SECRET } = require('../middleware/auth');
+const { sendMail } = require('../lib/mailer');
 
 // POST /api/auth/login
 const login = async (req, res, next) => {
@@ -102,4 +104,68 @@ const getMe = async (req, res, next) => {
   }
 };
 
-module.exports = { login, logout, getMe };
+// POST /api/auth/forgot-password
+const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: { message: 'Email is required.' } });
+
+    const result = await pool.query('SELECT id, name, email FROM users WHERE email = $1 AND is_active = true', [email.toLowerCase().trim()]);
+    // Always return success to avoid email enumeration
+    if (result.rows.length === 0) return res.json({ message: 'If that email exists, a reset link has been sent.' });
+
+    const user = result.rows[0];
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await pool.query('UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE id = $3', [token, expires, user.id]);
+
+    const origin = req.headers.origin || 'http://localhost:5173';
+    const resetLink = `${origin}/reset-password?token=${token}`;
+
+    await sendMail({
+      to: user.email,
+      subject: 'Password Reset Request',
+      html: `
+        <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;border:1px solid #e5e7eb;border-radius:8px;">
+          <h2 style="color:#1f2937;">Password Reset</h2>
+          <p>Hi <strong>${user.name}</strong>,</p>
+          <p>We received a request to reset your password. Click the button below to set a new password. This link expires in <strong>1 hour</strong>.</p>
+          <a href="${resetLink}" style="display:inline-block;margin:16px 0;padding:12px 24px;background:#f59e0b;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">Reset Password</a>
+          <p style="color:#6b7280;font-size:13px;">If you didn't request this, you can safely ignore this email.</p>
+        </div>
+      `,
+    });
+
+    res.json({ message: 'If that email exists, a reset link has been sent.' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/auth/reset-password
+const resetPassword = async (req, res, next) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: { message: 'Token and password are required.' } });
+    if (password.length < 6) return res.status(400).json({ error: { message: 'Password must be at least 6 characters.' } });
+
+    const result = await pool.query(
+      'SELECT id FROM users WHERE reset_token = $1 AND reset_token_expires > NOW()',
+      [token]
+    );
+    if (result.rows.length === 0) return res.status(400).json({ error: { message: 'Reset link is invalid or has expired.' } });
+
+    const hash = await bcrypt.hash(password, 10);
+    await pool.query(
+      'UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2',
+      [hash, result.rows[0].id]
+    );
+
+    res.json({ message: 'Password reset successfully. You can now log in.' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { login, logout, getMe, forgotPassword, resetPassword };

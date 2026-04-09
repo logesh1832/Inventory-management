@@ -627,7 +627,7 @@ export default function OrderForm() {
                     <div className="sm:col-span-8" data-item-product={item.id}>
                       <label className="block text-xs font-medium text-gray-500 mb-1">Product <span className="text-red-500">*</span></label>
                       <SearchableSelect
-                        options={products.map((p) => ({ value: p.id, label: `${p.product_name} (${p.product_code})` }))}
+                        options={products.map((p) => ({ value: p.id, label: p.product_name }))}
                         value={item.product_id}
                         onChange={(val) => handleProductChange(item.id, val)}
                         placeholder="Select product..."

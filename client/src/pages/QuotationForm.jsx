@@ -207,7 +207,7 @@ export default function QuotationForm() {
     updateItem(index, 'product_id', product.id);
     setProductSearches((prev) => ({
       ...prev,
-      [index]: `${product.product_name} (${product.product_code})`,
+      [index]: product.product_name,
     }));
     setProductDropdownOpen((prev) => ({ ...prev, [index]: false }));
   };
@@ -298,7 +298,7 @@ export default function QuotationForm() {
         if (item.product_id) {
           const prod = getProductById(item.product_id);
           if (prod && !productSearches[idx]) {
-            searches[idx] = `${prod.product_name} (${prod.product_code})`;
+            searches[idx] = prod.product_name;
           }
         }
       });
@@ -484,7 +484,6 @@ export default function QuotationForm() {
                               onClick={() => selectProduct(index, p)}
                             >
                               <span className="font-medium">{p.product_name}</span>{' '}
-                              <span className="text-gray-500">({p.product_code})</span>{' '}
                               {user?.role !== 'salesperson' && (
                                 <span className="text-xs text-gray-400">
                                   Stock: {stockMap[p.id] || 0}

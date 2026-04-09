@@ -144,7 +144,7 @@ export default function OrderDetail() {
                   <tr key={item.id}>
                     <td className="py-1 px-2 text-xs text-gray-600 align-top border border-gray-300">{index + 1}</td>
                     <td className="py-1 px-2 text-[11px] text-gray-800 align-top border border-gray-300">
-                      {item.product_code} - {item.product_name}
+                      {item.product_name}
                     </td>
                     <td className="py-1 px-2 text-[10px] text-gray-600 align-top border border-gray-300">{batchList}</td>
                     <td className="py-1 px-2 text-xs text-right align-top border border-gray-300">

@@ -44,7 +44,7 @@ const groupByProduct = (data) => {
   data.forEach((m) => {
     const key = m.product_id;
     if (!map[key]) map[key] = {
-      label: m.product_name, sublabel: m.product_code, sortKey: m.product_name,
+      label: m.product_name, sortKey: m.product_name,
       inQty: 0, outQty: 0, unit: m.unit, sub_unit: m.sub_unit, qty_per_box: m.qty_per_box,
     };
     if (m.movement_type === 'IN') map[key].inQty += m.quantity;

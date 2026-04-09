@@ -174,7 +174,7 @@ export default function Orders() {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
           <SearchableSelect
-            options={products.map((p) => ({ value: p.id, label: `${p.product_name} (${p.product_code})` }))}
+            options={products.map((p) => ({ value: p.id, label: p.product_name }))}
             value={filters.product_id}
             onChange={(val) => handleFilterChange({ target: { name: 'product_id', value: val } })}
             placeholder="All Products"

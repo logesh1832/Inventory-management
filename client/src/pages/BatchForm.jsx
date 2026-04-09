@@ -417,7 +417,7 @@ export default function BatchForm() {
                   <div className="sm:col-span-8" data-row-product={row.id}>
                     <label className="block text-xs font-medium text-gray-500 mb-1">Product <span className="text-red-500">*</span></label>
                     <SearchableSelect
-                      options={products.map((p) => ({ value: p.id, label: `${p.product_name} (${p.product_code})${p.batch_tracking ? ' [BT]' : ''}` }))}
+                      options={products.map((p) => ({ value: p.id, label: `${p.product_name}${p.batch_tracking ? ' [BT]' : ''}` }))}
                       value={row.product_id}
                       onChange={(val) => handleProductChange(row.id, val)}
                       placeholder="Select product..."

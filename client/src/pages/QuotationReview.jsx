@@ -391,7 +391,7 @@ export default function QuotationReview() {
               >
                 <option value="">+ Add Product</option>
                 {products.filter((p) => p.status === 'active' && !items.some((i) => i.product_id === p.id)).map((p) => (
-                  <option key={p.id} value={p.id}>{p.product_name} ({p.product_code}) — Stock: {p.available_stock}</option>
+                  <option key={p.id} value={p.id}>{p.product_name} — Stock: {p.available_stock}</option>
                 ))}
               </select>
             )}
