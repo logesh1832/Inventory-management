@@ -109,7 +109,7 @@ export default function RoleManagement() {
       closeModal();
       fetchRoles();
     } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to save role';
+      const msg = (err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to save role';
       showToast(msg, 'error');
     } finally {
       setSaving(false);
@@ -123,7 +123,7 @@ export default function RoleManagement() {
       setDeleteConfirm(null);
       fetchRoles();
     } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to delete role';
+      const msg = (err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to delete role';
       showToast(msg, 'error');
       setDeleteConfirm(null);
     }

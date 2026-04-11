@@ -48,6 +48,11 @@ app.use('/api/dashboard', dashboardRoutes);
 // Error handler (must be last)
 app.use(errorHandler);
 
+// Hold order expiry scheduler — runs every hour
+const { expireHolds } = require('./controllers/orderController');
+expireHolds();
+setInterval(expireHolds, 60 * 60 * 1000);
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

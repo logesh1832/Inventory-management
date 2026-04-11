@@ -59,7 +59,7 @@ export default function QuotationReview() {
       setItems(qRes.data.items.map((i) => ({ ...i })));
       setProducts(pRes.data);
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to load quotation', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to load quotation', 'error');
     } finally {
       setLoading(false);
     }
@@ -74,7 +74,7 @@ export default function QuotationReview() {
       showToast('Review started — quotation is now locked for the salesperson');
       fetchQuotation();
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to start review', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to start review', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -87,7 +87,7 @@ export default function QuotationReview() {
       showToast('Quotation approved');
       fetchQuotation();
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to approve', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to approve', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -105,7 +105,7 @@ export default function QuotationReview() {
       setShowRejectModal(false);
       fetchQuotation();
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to reject', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to reject', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -117,7 +117,7 @@ export default function QuotationReview() {
       setStockCheck(data);
       setShowConvertModal(true);
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to check stock', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to check stock', 'error');
     }
   };
 
@@ -129,7 +129,7 @@ export default function QuotationReview() {
       setShowConvertModal(false);
       setTimeout(() => navigate(`/orders/${data.order_id}`), 1000);
     } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to convert';
+      const msg = (err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to convert';
       showToast(msg, 'error');
       if (err.response?.data?.insufficient_items) {
         setStockCheck(err.response.data.insufficient_items.map((i) => ({
@@ -196,7 +196,7 @@ export default function QuotationReview() {
       setEditing(false);
       fetchQuotation();
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to save', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to save', 'error');
     } finally {
       setActionLoading(false);
     }

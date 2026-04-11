@@ -19,7 +19,7 @@ export default function Login() {
     } catch (err) {
       setError(
         err.response?.data?.error?.message ||
-        err.response?.data?.error ||
+        (err.response?.data?.error?.message || err.response?.data?.error) ||
         err.response?.data?.message ||
         'Login failed. Please check your credentials.'
       );

@@ -225,7 +225,7 @@ export default function StockMovements() {
       setTotalIn(res.data.total_in);
       setTotalOut(res.data.total_out);
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to load movements', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to load movements', 'error');
     } finally {
       setLoading(false);
     }

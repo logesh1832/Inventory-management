@@ -46,7 +46,7 @@ export default function Products() {
       setDeleteConfirm(null);
       fetchProducts();
     } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to delete product';
+      const msg = (err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to delete product';
       showToast(msg, 'error');
       setDeleteConfirm(null);
     }

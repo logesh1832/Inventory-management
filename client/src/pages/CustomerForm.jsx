@@ -80,7 +80,7 @@ export default function CustomerForm() {
 
       navigate('/customers');
     } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to save customer';
+      const msg = (err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to save customer';
       showToast(msg, 'error');
     } finally {
       setSubmitting(false);

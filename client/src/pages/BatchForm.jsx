@@ -299,7 +299,7 @@ export default function BatchForm() {
       showToast(`${items.length} batch(es) saved successfully`);
       setTimeout(() => navigate('/batches'), 600);
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to save batches', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to save batches', 'error');
     } finally {
       setSubmitting(false);
     }

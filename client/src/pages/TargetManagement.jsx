@@ -127,7 +127,7 @@ export default function TargetManagement() {
       setShowModal(false);
       fetchTargets();
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to save target');
+      setError((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to save target');
     } finally {
       setSaving(false);
     }
@@ -139,7 +139,7 @@ export default function TargetManagement() {
       setDeleteConfirm(null);
       fetchTargets();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to delete target');
+      alert((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to delete target');
       setDeleteConfirm(null);
     }
   };

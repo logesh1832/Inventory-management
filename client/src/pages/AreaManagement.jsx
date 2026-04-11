@@ -216,7 +216,7 @@ export default function AreaManagement() {
       resetForm();
       fetchData();
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to save area', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to save area', 'error');
     }
   };
 
@@ -227,7 +227,7 @@ export default function AreaManagement() {
       showToast('Area deleted');
       fetchData();
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to delete', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to delete', 'error');
     }
   };
 
@@ -255,7 +255,7 @@ export default function AreaManagement() {
       setAssignForm({ salesperson_id: '', area_id: '' });
       fetchData();
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to assign', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to assign', 'error');
     }
   };
 
@@ -266,7 +266,7 @@ export default function AreaManagement() {
       showToast('Assignment removed');
       fetchData();
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to remove', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to remove', 'error');
     }
   };
 

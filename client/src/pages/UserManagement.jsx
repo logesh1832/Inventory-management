@@ -100,7 +100,7 @@ export default function UserManagement() {
       setShowModal(false);
       fetchUsers();
     } catch (err) {
-      setFormError(err.response?.data?.error?.message || err.response?.data?.error || 'Operation failed.');
+      setFormError(err.response?.data?.error?.message || (err.response?.data?.error?.message || err.response?.data?.error) || 'Operation failed.');
     }
     setSaving(false);
   };
@@ -112,7 +112,7 @@ export default function UserManagement() {
       await api.patch(`/users/${user.id}/status`);
       fetchUsers();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to update status.');
+      alert((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to update status.');
     }
   };
 

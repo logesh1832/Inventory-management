@@ -48,7 +48,7 @@ export default function Customers() {
       setDeleteConfirm(null);
       fetchCustomers(search);
     } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to delete customer';
+      const msg = (err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to delete customer';
       showToast(msg, 'error');
       setDeleteConfirm(null);
     }

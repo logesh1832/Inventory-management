@@ -64,6 +64,7 @@ export default function OrderForm() {
   const [oldDeductions, setOldDeductions] = useState([]);
 
   const formRef = useRef(null);
+  const holdModeRef = useRef(false);
   const qtyRefs = useRef({});
   const dateRef = useRef(null);
 
@@ -486,12 +487,14 @@ export default function OrderForm() {
         }
       }
 
+      const isHold = !isEdit && holdModeRef.current;
       const body = {
         customer_id: customerId,
         order_date: orderDate,
         reference_number: referenceNumber || undefined,
         party_name: partyName || undefined,
         items: payload,
+        ...(isHold ? { is_hold: true } : {}),
       };
 
       if (isEdit) {
@@ -500,13 +503,14 @@ export default function OrderForm() {
         setTimeout(() => navigate(`/orders/${id}`), 600);
       } else {
         await api.post('/orders', body);
-        showToast('Order created successfully');
+        showToast(isHold ? 'Hold order created. Stock reserved for 72 hours.' : 'Order created successfully');
         setTimeout(() => navigate('/orders'), 600);
       }
     } catch (err) {
-      showToast(err.response?.data?.error || `Failed to ${isEdit ? 'update' : 'create'} order`, 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || `Failed to ${isEdit ? 'update' : 'create'} order`, 'error');
     } finally {
       setSubmitting(false);
+      holdModeRef.current = false;
     }
   };
 
@@ -854,6 +858,16 @@ export default function OrderForm() {
             >
               Cancel
             </button>
+            {!isEdit && (
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => { holdModeRef.current = true; formRef.current?.requestSubmit(); }}
+                className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 disabled:opacity-50 transition-colors text-sm font-medium"
+              >
+                {submitting && holdModeRef.current ? 'Holding...' : 'Hold'}
+              </button>
+            )}
             <button
               type="submit"
               disabled={submitting}

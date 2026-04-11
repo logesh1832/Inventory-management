@@ -11,6 +11,7 @@ export default function OrderDetail() {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const [converting, setConverting] = useState(false);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -35,13 +36,40 @@ export default function OrderDetail() {
         const res = await api.get(`/orders/${id}`);
         setOrder(res.data);
       } catch (err) {
-        showToast(err.response?.data?.error || 'Failed to load order', 'error');
+        showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to load order', 'error');
       } finally {
         setLoading(false);
       }
     };
     fetchOrder();
   }, [id]);
+
+  const handleConvertToMO = async () => {
+    if (!window.confirm('Convert this hold order to a full MO? This will generate an MO number and make it permanent.')) return;
+    setConverting(true);
+    try {
+      await api.post(`/orders/${id}/convert`);
+      // Refetch full order (with items) instead of using the partial convert response
+      const refreshed = await api.get(`/orders/${id}`);
+      setOrder(refreshed.data);
+      showToast('Converted to MO successfully!');
+    } catch (err) {
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to convert', 'error');
+    } finally {
+      setConverting(false);
+    }
+  };
+
+  const handleCancelHold = async () => {
+    if (!window.confirm('Cancel this hold order? Stock will be released back to inventory.')) return;
+    try {
+      await api.patch(`/orders/${id}/cancel`);
+      showToast('Hold order cancelled. Stock released.');
+      setTimeout(() => navigate('/orders'), 600);
+    } catch (err) {
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to cancel hold', 'error');
+    }
+  };
 
   if (loading) return <p className="text-gray-500">Loading...</p>;
   if (!order) return <p className="text-gray-500">Order not found.</p>;
@@ -79,18 +107,39 @@ export default function OrderDetail() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 no-print">
         <h2 className="text-2xl font-bold text-gray-800">Material Out Detail</h2>
         <div className="flex gap-3">
-          <Link
-            to={`/orders/${id}/edit`}
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors text-sm font-medium"
-          >
-            Edit
-          </Link>
-          <button
-            onClick={() => window.print()}
-            className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300 transition-colors text-sm"
-          >
-            Print Invoice
-          </button>
+          {order.status === 'hold' && (
+            <>
+              <button
+                onClick={handleConvertToMO}
+                disabled={converting}
+                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-50"
+              >
+                {converting ? 'Converting...' : 'Convert to MO'}
+              </button>
+              <button
+                onClick={handleCancelHold}
+                className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors text-sm font-medium"
+              >
+                Cancel Hold
+              </button>
+            </>
+          )}
+          {order.status !== 'cancelled' && (
+            <Link
+              to={`/orders/${id}/edit`}
+              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors text-sm font-medium"
+            >
+              Edit
+            </Link>
+          )}
+          {order.status !== 'hold' && order.status !== 'cancelled' && (
+            <button
+              onClick={() => window.print()}
+              className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300 transition-colors text-sm"
+            >
+              Print Invoice
+            </button>
+          )}
           <Link
             to="/orders"
             className="bg-yellow-500 text-gray-900 px-4 py-2 rounded hover:bg-yellow-600 transition-colors text-sm"
@@ -99,6 +148,31 @@ export default function OrderDetail() {
           </Link>
         </div>
       </div>
+
+      {order.status === 'hold' && (
+        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-center gap-3 no-print">
+          <svg className="h-5 w-5 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <p className="text-sm font-medium text-amber-800">Hold Order — Stock Reserved</p>
+            {order.expires_at && (
+              <p className="text-xs text-amber-600">
+                Expires: {new Date(order.expires_at).toLocaleString()} ({Math.max(0, Math.round((new Date(order.expires_at) - Date.now()) / 3600000))}h remaining)
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {order.status === 'cancelled' && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-center gap-3 no-print">
+          <svg className="h-5 w-5 text-red-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+          </svg>
+          <p className="text-sm font-medium text-red-700">This hold order was cancelled. Stock has been released back to inventory.</p>
+        </div>
+      )}
 
       {/* === PRINT TEMPLATE (A5) — visible on screen too === */}
       <div className="bg-white rounded shadow print-area" id="print-invoice">
@@ -109,7 +183,9 @@ export default function OrderDetail() {
           <div className="flex items-start justify-between mb-3">
             <h2 className="text-sm font-bold text-gray-900">GREE Marketing India LLP</h2>
             <div className="text-right">
-              <h3 className="text-base font-bold text-gray-800">ORDER #{order.invoice_number}</h3>
+              <h3 className="text-base font-bold text-gray-800">
+                {order.invoice_number ? `ORDER #${order.invoice_number}` : 'HOLD ORDER'}
+              </h3>
               {order.reference_number && <p className="text-xs text-gray-500">Ref: {order.reference_number}</p>}
             </div>
           </div>
@@ -138,7 +214,7 @@ export default function OrderDetail() {
               </tr>
             </thead>
             <tbody>
-              {order.items.map((item, index) => {
+              {(order.items || []).map((item, index) => {
                 const batchList = item.deductions?.map((d) => d.batch_number).filter(Boolean).join(', ') || '—';
                 return (
                   <tr key={item.id}>
@@ -176,7 +252,7 @@ export default function OrderDetail() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {order.items.map((item) => (
+              {(order.items || []).map((item) => (
                 <tr key={item.id}>
                   <td className="px-4 py-2 text-sm font-medium text-gray-800">{item.product_name}</td>
                   <td className="px-4 py-2 text-sm">{formatQty(item.quantity, item.unit, item.sub_unit, item.qty_per_box)}</td>

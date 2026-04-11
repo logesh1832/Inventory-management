@@ -135,7 +135,7 @@ export default function Batches() {
       showToast('Stock entries deleted successfully');
       fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, page);
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to delete stock entries', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to delete stock entries', 'error');
     }
   };
 

@@ -125,7 +125,7 @@ export default function ProductForm() {
       }
       navigate('/products');
     } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to save product';
+      const msg = (err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to save product';
       showToast(msg, 'error');
     } finally {
       setSubmitting(false);

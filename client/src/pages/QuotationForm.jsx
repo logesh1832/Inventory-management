@@ -124,7 +124,7 @@ export default function QuotationForm() {
           setCustomerSearch(`${cust.customer_name} - ${cust.phone || ''}`);
         }
       } catch (err) {
-        showToast(err.response?.data?.error || 'Failed to load quotation', 'error');
+        showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to load quotation', 'error');
         setTimeout(() => navigate('/my-quotations'), 500);
       } finally {
         setLoading(false);
@@ -284,7 +284,7 @@ export default function QuotationForm() {
       );
       setTimeout(() => navigate('/my-quotations'), 500);
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to save quotation', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to save quotation', 'error');
     } finally {
       setSubmitting(false);
     }

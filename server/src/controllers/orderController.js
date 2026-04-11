@@ -2,7 +2,8 @@ const pool = require('../config/db');
 
 const createOrder = async (req, res, next) => {
   try {
-    const { customer_id, order_date, items, reference_number, party_name } = req.body;
+    const { customer_id, order_date, items, reference_number, party_name, is_hold } = req.body;
+    const isHold = is_hold === true;
 
     if (!customer_id) {
       return res.status(400).json({ error: 'customer_id is required' });
@@ -30,23 +31,29 @@ const createOrder = async (req, res, next) => {
     try {
       await client.query('BEGIN');
 
-      // Generate invoice number
-      const lastOrder = await client.query(
-        'SELECT invoice_number FROM orders ORDER BY created_at DESC LIMIT 1'
-      );
-      let nextNumber = 1;
-      if (lastOrder.rows.length > 0) {
-        const lastNum = parseInt(lastOrder.rows[0].invoice_number.replace(/^(INV-|MO-)/, ''), 10);
-        if (!isNaN(lastNum)) nextNumber = lastNum + 1;
+      // Generate invoice number (skipped for hold orders)
+      let invoiceNumber = null;
+      if (!isHold) {
+        const lastOrder = await client.query(
+          "SELECT invoice_number FROM orders WHERE invoice_number IS NOT NULL ORDER BY created_at DESC LIMIT 1"
+        );
+        let nextNumber = 1;
+        if (lastOrder.rows.length > 0) {
+          const lastNum = parseInt(lastOrder.rows[0].invoice_number.replace(/^(INV-|MO-)/, ''), 10);
+          if (!isNaN(lastNum)) nextNumber = lastNum + 1;
+        }
+        invoiceNumber = `MO-${String(nextNumber).padStart(4, '0')}`;
       }
-      const invoiceNumber = `MO-${String(nextNumber).padStart(4, '0')}`;
+
+      const date = order_date || new Date().toISOString().split('T')[0];
+      const expiresAt = isHold ? new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString() : null;
 
       // Insert order
       const orderResult = await client.query(
-        `INSERT INTO orders (invoice_number, customer_id, order_date, status, reference_number, party_name)
-         VALUES ($1, $2, $3, 'completed', $4, $5)
+        `INSERT INTO orders (invoice_number, customer_id, order_date, status, reference_number, party_name, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
-        [invoiceNumber, customer_id, order_date || new Date().toISOString().split('T')[0], reference_number || null, party_name || null]
+        [invoiceNumber, customer_id, date, isHold ? 'hold' : 'completed', reference_number || null, party_name || null, expiresAt]
       );
       const order = orderResult.rows[0];
 
@@ -195,6 +202,8 @@ const getAllOrders = async (req, res, next) => {
     if (status) {
       params.push(status);
       conditions.push(`o.status = $${params.length}`);
+    } else {
+      conditions.push(`o.status != 'expired'`);
     }
 
     if (from_date) {
@@ -330,6 +339,11 @@ const updateOrder = async (req, res, next) => {
       if (orderCheck.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Order not found' });
+      }
+
+      if (orderCheck.rows[0].status === 'expired') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Cannot edit an expired hold order' });
       }
 
       // 1. Reverse all existing stock deductions
@@ -525,4 +539,142 @@ const deleteOrder = async (req, res, next) => {
   }
 };
 
-module.exports = { createOrder, getAllOrders, getOrderById, updateOrder, deleteOrder };
+// POST /api/orders/:id/convert — convert a hold order to a completed MO
+const convertToMO = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const orderCheck = await client.query('SELECT * FROM orders WHERE id = $1 FOR UPDATE', [id]);
+      if (orderCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Order not found' });
+      }
+      const order = orderCheck.rows[0];
+      if (order.status !== 'hold') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Only hold orders can be converted to MO' });
+      }
+      if (order.expires_at && new Date(order.expires_at) < new Date()) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'This hold order has expired' });
+      }
+      // Generate invoice number
+      const lastOrder = await client.query(
+        "SELECT invoice_number FROM orders WHERE invoice_number IS NOT NULL ORDER BY created_at DESC LIMIT 1"
+      );
+      let nextNumber = 1;
+      if (lastOrder.rows.length > 0) {
+        const lastNum = parseInt(lastOrder.rows[0].invoice_number.replace(/^(INV-|MO-)/, ''), 10);
+        if (!isNaN(lastNum)) nextNumber = lastNum + 1;
+      }
+      const invoiceNumber = `MO-${String(nextNumber).padStart(4, '0')}`;
+      const result = await client.query(
+        "UPDATE orders SET invoice_number = $1, status = 'completed', expires_at = NULL WHERE id = $2 RETURNING *",
+        [invoiceNumber, id]
+      );
+      await client.query('COMMIT');
+      res.json({ order: result.rows[0] });
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Background job — expire and clean up hold orders past their expires_at
+const expireHolds = async () => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const expired = await client.query(
+      "SELECT id FROM orders WHERE status = 'hold' AND expires_at IS NOT NULL AND expires_at < NOW()"
+    );
+    for (const row of expired.rows) {
+      const movements = await client.query(
+        "SELECT * FROM stock_movements WHERE reference_type = 'ORDER' AND reference_id = $1 AND movement_type = 'OUT'",
+        [row.id]
+      );
+      for (const mov of movements.rows) {
+        await client.query(
+          'UPDATE inventory_batches SET quantity_remaining = quantity_remaining + $1 WHERE id = $2',
+          [mov.quantity, mov.batch_id]
+        );
+      }
+      await client.query("DELETE FROM stock_movements WHERE reference_type = 'ORDER' AND reference_id = $1", [row.id]);
+      await client.query('DELETE FROM order_items WHERE order_id = $1', [row.id]);
+      await client.query("DELETE FROM orders WHERE id = $1", [row.id]);
+    }
+    await client.query('COMMIT');
+    if (expired.rows.length > 0) {
+      console.log(`[expireHolds] Cleaned up ${expired.rows.length} expired hold order(s)`);
+    }
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[expireHolds] Error:', err.message);
+  } finally {
+    client.release();
+  }
+};
+
+// PATCH /api/orders/:id/cancel — soft-delete a hold order: reverse stock, mark as cancelled
+const cancelHold = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const orderCheck = await client.query('SELECT * FROM orders WHERE id = $1 FOR UPDATE', [id]);
+      if (orderCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: { message: 'Order not found' } });
+      }
+      const order = orderCheck.rows[0];
+      if (order.status !== 'hold') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: { message: 'Only hold orders can be cancelled this way' } });
+      }
+
+      // Reverse stock movements — add quantity back to each batch
+      const movements = await client.query(
+        "SELECT * FROM stock_movements WHERE reference_type = 'ORDER' AND reference_id = $1 AND movement_type = 'OUT'",
+        [id]
+      );
+      for (const mov of movements.rows) {
+        await client.query(
+          'UPDATE inventory_batches SET quantity_remaining = quantity_remaining + $1 WHERE id = $2',
+          [mov.quantity, mov.batch_id]
+        );
+      }
+
+      // Remove stock movements and order items but keep the order record
+      await client.query("DELETE FROM stock_movements WHERE reference_type = 'ORDER' AND reference_id = $1", [id]);
+      await client.query('DELETE FROM order_items WHERE order_id = $1', [id]);
+
+      // Mark order as cancelled (soft delete)
+      const result = await client.query(
+        "UPDATE orders SET status = 'cancelled', expires_at = NULL WHERE id = $1 RETURNING *",
+        [id]
+      );
+
+      await client.query('COMMIT');
+      res.json({ order: result.rows[0] });
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { createOrder, getAllOrders, getOrderById, updateOrder, deleteOrder, convertToMO, expireHolds, cancelHold };

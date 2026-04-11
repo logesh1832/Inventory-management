@@ -195,7 +195,7 @@ export default function StockEntryEdit() {
       setDeletedIds((prev) => [...prev, rowId]);
       showToast('Entry deleted');
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to delete entry', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to delete entry', 'error');
     }
   };
 
@@ -342,7 +342,7 @@ export default function StockEntryEdit() {
       showToast(`${total} entry(s) saved successfully`);
       setTimeout(() => navigate('/batches'), 600);
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to save', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to save', 'error');
     } finally {
       setSaving(false);
     }

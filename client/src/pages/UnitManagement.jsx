@@ -61,7 +61,7 @@ export default function UnitManagement() {
       closeModal();
       fetchUnits();
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to save unit', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to save unit', 'error');
     } finally {
       setSaving(false);
     }
@@ -74,7 +74,7 @@ export default function UnitManagement() {
       setDeleteConfirm(null);
       fetchUnits();
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to delete unit', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to delete unit', 'error');
       setDeleteConfirm(null);
     }
   };

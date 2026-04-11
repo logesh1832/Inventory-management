@@ -41,7 +41,7 @@ export default function MaterialInDetail() {
       showToast('Stock entry deleted successfully');
       fetchEntries();
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to delete stock entry', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to delete stock entry', 'error');
     }
   };
 

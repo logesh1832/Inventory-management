@@ -79,7 +79,7 @@ export default function Categories() {
       resetForm();
       fetchCategories();
     } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to save category';
+      const msg = (err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to save category';
       showToast(msg, 'error');
     } finally {
       setSubmitting(false);
@@ -93,7 +93,7 @@ export default function Categories() {
       setDeleteConfirm(null);
       fetchCategories();
     } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to delete category';
+      const msg = (err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to delete category';
       showToast(msg, 'error');
       setDeleteConfirm(null);
     }
@@ -105,7 +105,7 @@ export default function Categories() {
       showToast(`Category ${cat.is_active ? 'deactivated' : 'activated'} successfully`);
       fetchCategories();
     } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to update category';
+      const msg = (err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to update category';
       showToast(msg, 'error');
     }
   };

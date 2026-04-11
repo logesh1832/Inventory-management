@@ -64,7 +64,7 @@ export default function QuotationDetail() {
         } catch {}
       }
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to load quotation', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to load quotation', 'error');
     } finally {
       setLoading(false);
     }
@@ -81,7 +81,7 @@ export default function QuotationDetail() {
       showToast('Quotation submitted for review');
       fetchQuotation();
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to submit', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to submit', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -94,7 +94,7 @@ export default function QuotationDetail() {
       showToast('Quotation recalled to draft');
       fetchQuotation();
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to recall', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to recall', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -107,7 +107,7 @@ export default function QuotationDetail() {
       showToast('Quotation duplicated as new draft');
       setTimeout(() => navigate(`/quotations/${res.data.id}`), 500);
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to duplicate', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to duplicate', 'error');
     } finally {
       setActionLoading(false);
     }

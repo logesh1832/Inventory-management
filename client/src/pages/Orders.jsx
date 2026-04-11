@@ -47,7 +47,7 @@ export default function Orders() {
       setOrders(res.data.data);
       setTotal(res.data.total);
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to load orders', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to load orders', 'error');
     } finally {
       setLoading(false);
     }
@@ -84,7 +84,7 @@ export default function Orders() {
       showToast('Order deleted successfully');
       fetchOrders(filters, page);
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to delete order', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to delete order', 'error');
     }
   };
 
@@ -139,6 +139,21 @@ export default function Orders() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
+  const statusBadge = (o) => {
+    if (o.status === 'hold') {
+      const expiresAt = o.expires_at ? new Date(o.expires_at) : null;
+      const hoursLeft = expiresAt ? Math.max(0, Math.round((expiresAt - Date.now()) / 3600000)) : null;
+      return (
+        <span className="px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+          Hold{hoursLeft !== null ? ` · ${hoursLeft}h left` : ''}
+        </span>
+      );
+    }
+    if (o.status === 'completed') return <span className="px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">Complete</span>;
+    if (o.status === 'cancelled') return <span className="px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">Cancelled</span>;
+    return <span className="px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">{o.status}</span>;
+  };
+
   return (
     <div>
       {toast && (
@@ -189,8 +204,9 @@ export default function Orders() {
             className="border border-gray-300 rounded px-3 py-2 w-full"
           >
             <option value="">All Statuses</option>
-            <option value="pending">Pending</option>
-            <option value="completed">Completed</option>
+            <option value="hold">Hold</option>
+            <option value="completed">Complete</option>
+            <option value="cancelled">Cancelled</option>
           </select>
         </div>
         <div>
@@ -238,18 +254,12 @@ export default function Orders() {
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="font-medium text-gray-900">{o.invoice_number}</span>
+                  <span className="font-medium text-gray-900">
+                    {o.invoice_number || <span className="text-gray-400 italic text-xs">Hold</span>}
+                  </span>
                   {o.reference_number && <span className="text-xs text-gray-400 ml-1">({o.reference_number})</span>}
                 </div>
-                <span
-                  className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                    o.status === 'completed'
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}
-                >
-                  {o.status}
-                </span>
+                {statusBadge(o)}
               </div>
               <div className="text-sm text-gray-500">
                 <span className="text-gray-400">Customer:</span> {o.customer_name}
@@ -302,7 +312,7 @@ export default function Orders() {
                   }`}
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="font-medium">{o.invoice_number}</div>
+                    <div className="font-medium">{o.invoice_number || <span className="text-gray-400 italic text-xs">Hold</span>}</div>
                     {o.reference_number && <div className="text-xs text-gray-400">{o.reference_number}</div>}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -313,15 +323,7 @@ export default function Orders() {
                     {fmtDate(o.order_date)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        o.status === 'completed'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}
-                    >
-                      {o.status}
-                    </span>
+                    {statusBadge(o)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex gap-3">

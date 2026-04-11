@@ -69,7 +69,7 @@ export default function MyQuotations() {
       const res = await api.get(`/quotations${query}`);
       setQuotations(res.data);
     } catch (err) {
-      showToast(err.response?.data?.error || 'Failed to load quotations', 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to load quotations', 'error');
     } finally {
       setLoading(false);
     }
