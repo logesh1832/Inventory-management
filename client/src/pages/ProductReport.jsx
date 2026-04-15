@@ -25,8 +25,7 @@ export default function ProductReport() {
   const filtered = term
     ? stock.filter((p) => {
         const name = (p.product_name || '').toLowerCase();
-        const code = (p.product_code || '').toLowerCase();
-        return name.includes(term) || code.includes(term);
+        return name.includes(term);
       })
     : stock;
 
@@ -44,7 +43,7 @@ export default function ProductReport() {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by name or code..."
+            placeholder="Search by name..."
             className="border border-gray-300 rounded px-3 py-2 w-full text-sm"
           />
         </div>
@@ -71,9 +70,6 @@ export default function ProductReport() {
                   </span>
                 </div>
                 <div className="text-sm text-gray-500">
-                  <span className="text-gray-400">Code:</span> {p.product_code}
-                </div>
-                <div className="text-sm text-gray-500">
                   <span className="text-gray-400">Unit:</span> {p.unit}
                 </div>
                 <div className="text-xs text-gray-400">Tap to view movements</div>
@@ -87,7 +83,6 @@ export default function ProductReport() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Current Stock</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"></th>
@@ -101,7 +96,6 @@ export default function ProductReport() {
                     className="cursor-pointer hover:bg-gray-50"
                   >
                     <td className="px-6 py-4 whitespace-nowrap font-medium">{p.product_name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{p.product_code}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{p.unit}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-block px-2 py-1 rounded text-sm font-semibold ${stockBadge(p.total_stock)}`}>

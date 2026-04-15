@@ -157,7 +157,6 @@ export default function Dashboard() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                  <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
                 </tr>
@@ -167,12 +166,11 @@ export default function Dashboard() {
                   .filter((p) => {
                     if (!searchTerm) return true;
                     const t = searchTerm.toLowerCase();
-                    return p.product_name.toLowerCase().includes(t) || p.product_code.toLowerCase().includes(t);
+                    return p.product_name.toLowerCase().includes(t);
                   })
                   .map((p) => (
                     <tr key={p.product_id} className={`hover:bg-gray-50 ${p.total_stock < (p.low_stock_threshold ?? 50) ? 'bg-red-50' : ''}`}>
                       <td className="px-5 py-3 text-sm font-medium text-gray-800">{p.product_name}</td>
-                      <td className="px-5 py-3 text-sm text-gray-600">{p.product_code}</td>
                       <td className="px-5 py-3 text-sm text-gray-600">{p.unit}</td>
                       <td className="px-5 py-3">
                         <span className={`inline-block px-2 py-0.5 rounded text-sm font-semibold ${stockBadge(p.total_stock, p.low_stock_threshold)}`}>

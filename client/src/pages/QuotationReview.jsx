@@ -403,7 +403,6 @@ export default function QuotationReview() {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Unit Price</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Stock</th>
@@ -419,7 +418,6 @@ export default function QuotationReview() {
                     <tr key={item.id || index} className={!sufficient ? 'bg-red-50' : ''}>
                       <td className="px-4 py-3 text-sm">{index + 1}</td>
                       <td className="px-4 py-3 text-sm font-medium">{item.product_name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-500">{item.product_code}</td>
                       <td className="px-4 py-3 text-right">
                         {canEdit ? (
                           <input
@@ -455,7 +453,7 @@ export default function QuotationReview() {
               </tbody>
               <tfoot>
                 <tr className="bg-gray-50">
-                  <td colSpan={canEdit ? 6 : 6} className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Grand Total</td>
+                  <td colSpan={canEdit ? 5 : 5} className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Grand Total</td>
                   <td className="px-4 py-3 text-right text-lg font-bold text-gray-900">{formatCurrency(grandTotal)}</td>
                   {canEdit && <td />}
                 </tr>

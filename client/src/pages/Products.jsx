@@ -55,7 +55,7 @@ export default function Products() {
   const filtered = products.filter((p) => {
     if (!search) return true;
     const term = search.toLowerCase();
-    return (p.product_name?.toLowerCase() || '').includes(term) || (p.product_code?.toLowerCase() || '').includes(term);
+    return (p.product_name?.toLowerCase() || '').includes(term);
   });
 
   if (loading) {
@@ -99,7 +99,7 @@ export default function Products() {
       <div className="flex gap-3 mb-4 flex-wrap">
         <input
           type="text"
-          placeholder="Search by name or code..."
+          placeholder="Search by name..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 w-full sm:w-64"
@@ -148,9 +148,6 @@ export default function Products() {
                   )}
                 </div>
                 <div className="text-sm text-gray-500">
-                  <span className="text-gray-400">Code:</span> <span className="font-mono">{product.product_code}</span>
-                </div>
-                <div className="text-sm text-gray-500">
                   <span className="text-gray-400">Category:</span>{' '}
                   {product.category ? (
                     <span className="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700">{product.category}</span>
@@ -185,7 +182,6 @@ export default function Products() {
                 <tr>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Product Name</th>
-                  <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                   {!isSalesperson && (
                     <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
@@ -217,7 +213,6 @@ export default function Products() {
                         <span className="ml-2 inline-block px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-50 text-blue-600">BT</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 font-mono">{product.product_code}</td>
                     <td className="px-6 py-4 text-sm">
                       {product.category ? (
                         <span className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">

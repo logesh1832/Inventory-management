@@ -264,7 +264,6 @@ export default function QuotationDetail() {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Unit Price</th>
                   {user?.role !== 'salesperson' && (
@@ -281,9 +280,6 @@ export default function QuotationDetail() {
                       <td className="px-4 py-3 whitespace-nowrap text-sm">{index + 1}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
                         {item.product_name}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                        {item.product_code}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
                         {item.quantity}
@@ -305,7 +301,7 @@ export default function QuotationDetail() {
               </tbody>
               <tfoot>
                 <tr className="bg-gray-50">
-                  <td colSpan={user?.role !== 'salesperson' ? 6 : 5} className="px-4 py-3 text-right text-sm font-semibold text-gray-700">
+                  <td colSpan={user?.role !== 'salesperson' ? 5 : 4} className="px-4 py-3 text-right text-sm font-semibold text-gray-700">
                     Grand Total
                   </td>
                   <td className="px-4 py-3 text-right text-lg font-bold text-gray-900">

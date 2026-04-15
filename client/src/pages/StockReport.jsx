@@ -55,7 +55,7 @@ export default function StockReport() {
 
   const term = searchTerm.toLowerCase().trim();
   const filtered = term
-    ? stock.filter((p) => (p.product_name || '').toLowerCase().includes(term) || (p.product_code || '').toLowerCase().includes(term))
+    ? stock.filter((p) => (p.product_name || '').toLowerCase().includes(term))
     : stock;
 
   return (
@@ -82,7 +82,7 @@ export default function StockReport() {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by name or code..."
+            placeholder="Search by name..."
             className="border border-gray-300 rounded px-3 py-2 w-full text-sm"
           />
         </div>
@@ -128,9 +128,6 @@ export default function StockReport() {
                 {p.sub_unit && p.qty_per_box && (
                   <div className="text-xs text-gray-400">{p.total_stock} {p.sub_unit} total</div>
                 )}
-                <div className="text-sm text-gray-500">
-                  <span className="text-gray-400">Code:</span> {p.product_code}
-                </div>
                 <div className="text-sm text-gray-500">
                   <span className="text-gray-400">Unit:</span> {p.unit}
                 </div>

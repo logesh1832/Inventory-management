@@ -113,8 +113,6 @@ export default function ProductMovementDetail() {
           <div>
             <h3 className="text-lg font-bold text-gray-800">{product.product.product_name}</h3>
             <p className="text-sm text-gray-500 mt-1">
-              Code: <span className="font-medium text-gray-700">{product.product.product_code}</span>
-              <span className="mx-2">|</span>
               Unit: <span className="font-medium text-gray-700">{product.product.unit}</span>
             </p>
           </div>

@@ -164,23 +164,6 @@ export default function ProductForm() {
           {errors.product_name && <p className="text-red-500 text-xs mt-1">{errors.product_name}</p>}
         </div>
 
-        {/* Product Code */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Product Code
-          </label>
-          <input
-            type="text"
-            name="product_code"
-            value={form.product_code}
-            onChange={handleChange}
-            disabled={isEdit}
-            className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 ${isEdit ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''} ${errors.product_code ? 'border-red-500' : 'border-gray-300'}`}
-          />
-          {errors.product_code && <p className="text-red-500 text-xs mt-1">{errors.product_code}</p>}
-          {isEdit && <p className="text-gray-400 text-xs mt-1">Product code cannot be changed</p>}
-        </div>
-
         {/* Category */}
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
