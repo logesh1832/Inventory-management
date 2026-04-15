@@ -134,9 +134,6 @@ export default function Products() {
                     )}
                     <span className="font-medium text-gray-900">
                       {product.product_name}
-                      {product.batch_tracking && (
-                        <span className="ml-2 inline-block px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-50 text-blue-600">BT</span>
-                      )}
                     </span>
                   </div>
                   {!isSalesperson && (
@@ -209,9 +206,6 @@ export default function Products() {
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">
                       {product.product_name}
-                      {product.batch_tracking && (
-                        <span className="ml-2 inline-block px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-50 text-blue-600">BT</span>
-                      )}
                     </td>
                     <td className="px-6 py-4 text-sm">
                       {product.category ? (
