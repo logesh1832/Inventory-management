@@ -16,6 +16,17 @@ export default function Products() {
 
   const isSalesperson = user?.role === 'salesperson';
 
+  const formatStock = (stock, unit, subUnit, qtyPerBox) => {
+    if (subUnit && qtyPerBox) {
+      const boxes = Math.floor(stock / qtyPerBox);
+      const remaining = stock % qtyPerBox;
+      if (stock < qtyPerBox) return `${stock} ${subUnit}`;
+      if (remaining === 0) return `${boxes} ${unit}`;
+      return `${boxes} ${unit} + ${remaining} ${subUnit}`;
+    }
+    return `${stock} ${unit || ''}`;
+  };
+
   const fetchProducts = async () => {
     try {
       const params = {};
@@ -158,7 +169,7 @@ export default function Products() {
                       product.available_stock <= (product.low_stock_threshold ?? 50) * 4 ? 'bg-yellow-100 text-yellow-700' :
                       'bg-green-100 text-green-700'
                     }`}>
-                      {product.available_stock}
+                      {formatStock(product.available_stock, product.unit, product.sub_unit, product.qty_per_box)}
                     </span>
                   </div>
                 )}
@@ -221,11 +232,13 @@ export default function Products() {
                           product.available_stock <= (product.low_stock_threshold ?? 50) * 4 ? 'bg-yellow-100 text-yellow-700' :
                           'bg-green-100 text-green-700'
                         }`}>
-                          {product.available_stock}
+                          {formatStock(product.available_stock, product.unit, product.sub_unit, product.qty_per_box)}
                         </span>
                       </td>
                     )}
-                    <td className="px-6 py-4 text-sm text-gray-500">{product.unit}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {product.sub_unit ? `${product.unit} / ${product.sub_unit}` : product.unit}
+                    </td>
                     {!isSalesperson && (
                       <>
                         <td className="px-6 py-4">
