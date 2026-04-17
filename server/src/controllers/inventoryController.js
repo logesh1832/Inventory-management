@@ -133,49 +133,49 @@ const getLiveStockByProduct = async (req, res, next) => {
 
 const getStockReport = async (req, res, next) => {
   try {
-    const { product_id, low_stock_threshold, low_stock, category } = req.query;
+    const { product_id, low_stock_threshold, low_stock, category, search, page, limit } = req.query;
 
-    let query = `
-      SELECT
-        p.id AS product_id,
-        p.product_name,
-        p.product_code,
-        p.unit,
-        p.sub_unit,
-        p.qty_per_box,
-        p.low_stock_threshold,
-        p.category,
-        COALESCE(SUM(ib.quantity_remaining), 0)::int AS total_stock
-      FROM products p
-      LEFT JOIN inventory_batches ib ON ib.product_id = p.id
-      WHERE p.status = 'active'
-    `;
     const params = [];
+    let where = `p.status = 'active'`;
 
-    if (product_id) {
-      params.push(product_id);
-      query += ` AND p.id = $${params.length}`;
-    }
+    if (product_id) { params.push(product_id); where += ` AND p.id = $${params.length}`; }
+    if (category) { params.push(category); where += ` AND p.category = $${params.length}`; }
+    if (search) { params.push(`%${search}%`); where += ` AND p.product_name ILIKE $${params.length}`; }
 
-    if (category) {
-      params.push(category);
-      query += ` AND p.category = $${params.length}`;
-    }
-
-    query += ` GROUP BY p.id, p.product_name, p.product_code, p.unit, p.sub_unit, p.qty_per_box, p.low_stock_threshold, p.category`;
-
+    let having = '';
     if (low_stock_threshold) {
       params.push(Number(low_stock_threshold));
-      // quantity_remaining is in PCS for products with sub_unit; divide by qty_per_box to compare in Boxes
-      query += ` HAVING COALESCE(SUM(ib.quantity_remaining), 0) / COALESCE(p.qty_per_box, 1) < $${params.length}`;
+      having = ` HAVING COALESCE(SUM(ib.quantity_remaining), 0) / COALESCE(p.qty_per_box, 1) < $${params.length}`;
     } else if (low_stock) {
-      query += ` HAVING COALESCE(SUM(ib.quantity_remaining), 0) / COALESCE(p.qty_per_box, 1) < COALESCE(p.low_stock_threshold, 50)`;
+      having = ` HAVING COALESCE(SUM(ib.quantity_remaining), 0) / COALESCE(p.qty_per_box, 1) < COALESCE(p.low_stock_threshold, 50)`;
     }
 
-    query += ` ORDER BY p.product_name ASC`;
+    const cte = `
+      WITH stock_data AS (
+        SELECT p.id AS product_id, p.product_name, p.product_code, p.unit, p.sub_unit, p.qty_per_box, p.low_stock_threshold, p.category,
+               COALESCE(SUM(ib.quantity_remaining), 0)::int AS total_stock
+        FROM products p
+        LEFT JOIN inventory_batches ib ON ib.product_id = p.id
+        WHERE ${where}
+        GROUP BY p.id, p.product_name, p.product_code, p.unit, p.sub_unit, p.qty_per_box, p.low_stock_threshold, p.category
+        ${having}
+      )`;
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    if (!page) {
+      const result = await pool.query(`${cte} SELECT * FROM stock_data ORDER BY product_name ASC`, params);
+      return res.json(result.rows);
+    }
+
+    const pg = Math.max(1, parseInt(page) || 1);
+    const lim = Math.min(100, Math.max(1, parseInt(limit) || 20));
+    const offset = (pg - 1) * lim;
+
+    const [dataRes, countRes] = await Promise.all([
+      pool.query(`${cte} SELECT * FROM stock_data ORDER BY product_name ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`, [...params, lim, offset]),
+      pool.query(`${cte} SELECT COUNT(*)::int AS total FROM stock_data`, params),
+    ]);
+
+    res.json({ data: dataRes.rows, total: countRes.rows[0].total });
   } catch (err) {
     next(err);
   }

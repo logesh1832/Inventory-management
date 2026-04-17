@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import Pagination from '../components/Pagination';
+
 const stockBadge = (qty, threshold = 50) => {
   if (qty < threshold) return 'bg-red-100 text-red-700';
   if (qty <= threshold * 4) return 'bg-yellow-100 text-yellow-700';
   return 'bg-green-100 text-green-700';
 };
 
-// total_stock is stored in PCS for products with sub_unit; convert to Boxes for primary display
 const primaryStock = (p) => {
   if (p.sub_unit && p.qty_per_box) return Math.floor(p.total_stock / p.qty_per_box);
   return p.total_stock;
@@ -21,42 +22,61 @@ export default function StockReport() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [total, setTotal] = useState(0);
 
-  const fetchStock = async (lowStock, category) => {
+  const fetchStock = useCallback(async (pg, lim, lowStock, category, search) => {
     try {
       setLoading(true);
-      const params = {};
+      const params = { page: pg, limit: lim };
       if (lowStock) params.low_stock = true;
       if (category) params.category = category;
+      if (search) params.search = search;
       const res = await api.get('/inventory/stock-report', { params });
-      setStock(res.data);
+      setStock(res.data.data);
+      setTotal(res.data.total);
     } catch {
       // ignore
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchStock(false, '');
+    fetchStock(1, limit, false, '', '');
     api.get('/products/categories').then((res) => setCategories(res.data)).catch(() => {});
   }, []);
 
   const handleLowStockToggle = () => {
     const next = !lowStockOnly;
     setLowStockOnly(next);
-    fetchStock(next, selectedCategory);
+    setPage(1);
+    fetchStock(1, limit, next, selectedCategory, searchTerm);
   };
 
   const handleCategoryChange = (e) => {
     setSelectedCategory(e.target.value);
-    fetchStock(lowStockOnly, e.target.value);
+    setPage(1);
+    fetchStock(1, limit, lowStockOnly, e.target.value, searchTerm);
   };
 
-  const term = searchTerm.toLowerCase().trim();
-  const filtered = term
-    ? stock.filter((p) => (p.product_name || '').toLowerCase().includes(term))
-    : stock;
+  const handleSearch = (val) => {
+    setSearchTerm(val);
+    setPage(1);
+    fetchStock(1, limit, lowStockOnly, selectedCategory, val);
+  };
+
+  const handlePageChange = (pg) => {
+    setPage(pg);
+    fetchStock(pg, limit, lowStockOnly, selectedCategory, searchTerm);
+  };
+
+  const handleLimitChange = (lim) => {
+    setLimit(lim);
+    setPage(1);
+    fetchStock(1, lim, lowStockOnly, selectedCategory, searchTerm);
+  };
 
   return (
     <div className="space-y-6">
@@ -73,15 +93,13 @@ export default function StockReport() {
         </label>
       </div>
 
-
-      {/* Search & Filters */}
       <div className="flex flex-wrap gap-3 items-end">
         <div className="w-full sm:w-72">
           <label className="block text-xs font-medium text-gray-500 mb-1">Search Product</label>
           <input
             type="text"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => handleSearch(e.target.value)}
             placeholder="Search by name..."
             className="border border-gray-300 rounded px-3 py-2 w-full text-sm"
           />
@@ -101,16 +119,15 @@ export default function StockReport() {
         </div>
       </div>
 
-      {/* Stock Table */}
       {loading ? (
         <p className="text-gray-500">Loading...</p>
-      ) : filtered.length === 0 ? (
+      ) : stock.length === 0 ? (
         <p className="text-gray-500">No products found.</p>
       ) : (
         <>
           {/* Mobile cards */}
           <div className="md:hidden space-y-3">
-            {filtered.map((p) => (
+            {stock.map((p) => (
               <div
                 key={p.product_id}
                 onClick={() => navigate(`/product-report/${p.product_id}`)}
@@ -128,12 +145,8 @@ export default function StockReport() {
                 {p.sub_unit && p.qty_per_box && (
                   <div className="text-xs text-gray-400">{p.total_stock} {p.sub_unit} total</div>
                 )}
-                <div className="text-sm text-gray-500">
-                  <span className="text-gray-400">Unit:</span> {p.unit}
-                </div>
-                <div className="text-sm text-gray-500">
-                  <span className="text-gray-400">Threshold:</span> {p.low_stock_threshold ?? 50}
-                </div>
+                <div className="text-sm text-gray-500"><span className="text-gray-400">Unit:</span> {p.unit}</div>
+                <div className="text-sm text-gray-500"><span className="text-gray-400">Threshold:</span> {p.low_stock_threshold ?? 50}</div>
                 <div className="text-xs text-gray-400">Tap to view movements</div>
               </div>
             ))}
@@ -152,12 +165,8 @@ export default function StockReport() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filtered.map((p) => (
-                  <tr
-                    key={p.product_id}
-                    onClick={() => navigate(`/product-report/${p.product_id}`)}
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
+                {stock.map((p) => (
+                  <tr key={p.product_id} onClick={() => navigate(`/product-report/${p.product_id}`)} className="cursor-pointer hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-sm text-gray-800">{p.product_name}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`inline-block px-2 py-1 rounded text-sm font-semibold ${stockBadge(primaryStock(p), p.low_stock_threshold)}`}>
@@ -171,17 +180,15 @@ export default function StockReport() {
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{p.unit}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                      {p.low_stock_threshold ?? 50}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-blue-500 font-medium">
-                      View Details
-                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{p.low_stock_threshold ?? 50}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-blue-500 font-medium">View Details</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          <Pagination page={page} total={total} limit={limit} onPageChange={handlePageChange} onLimitChange={handleLimitChange} />
         </>
       )}
     </div>
