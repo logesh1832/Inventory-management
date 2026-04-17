@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api, { getFileUrl } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import SearchableSelect from '../components/SearchableSelect';
+import Pagination from '../components/Pagination';
 
 export default function Products() {
   const { user } = useAuth();
@@ -13,41 +14,59 @@ export default function Products() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [total, setTotal] = useState(0);
 
   const isSalesperson = user?.role === 'salesperson';
 
-  const formatStock = (stock, unit, subUnit, qtyPerBox) => {
-    if (subUnit && qtyPerBox) {
-      const boxes = Math.floor(stock / qtyPerBox);
-      const remaining = stock % qtyPerBox;
-      if (stock < qtyPerBox) return `${stock} ${subUnit}`;
-      if (remaining === 0) return `${boxes} ${unit}`;
-      return `${boxes} ${unit} + ${remaining} ${subUnit}`;
-    }
-    return `${stock} ${unit || ''}`;
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
   };
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async (pg, lim, srch, cat) => {
     try {
-      const params = {};
-      if (categoryFilter) params.category = categoryFilter;
+      setLoading(true);
+      const params = { page: pg, limit: lim };
+      if (srch) params.search = srch;
+      if (cat) params.category = cat;
       const { data } = await api.get('/products', { params });
-      setProducts(data);
+      setProducts(data.data);
+      setTotal(data.total);
     } catch {
       showToast('Failed to load products', 'error');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchProducts();
     api.get('/products/categories').then(({ data }) => setCategories(data)).catch(() => {});
-  }, [categoryFilter]);
+    fetchProducts(1, limit, '', '');
+  }, []);
 
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+  const handleSearch = (val) => {
+    setSearch(val);
+    setPage(1);
+    fetchProducts(1, limit, val, categoryFilter);
+  };
+
+  const handleCategory = (val) => {
+    setCategoryFilter(val);
+    setPage(1);
+    fetchProducts(1, limit, search, val);
+  };
+
+  const handlePageChange = (pg) => {
+    setPage(pg);
+    fetchProducts(pg, limit, search, categoryFilter);
+  };
+
+  const handleLimitChange = (lim) => {
+    setLimit(lim);
+    setPage(1);
+    fetchProducts(1, lim, search, categoryFilter);
   };
 
   const handleDelete = async (id) => {
@@ -55,23 +74,12 @@ export default function Products() {
       await api.delete(`/products/${id}`);
       showToast('Product deleted successfully');
       setDeleteConfirm(null);
-      fetchProducts();
+      fetchProducts(page, limit, search, categoryFilter);
     } catch (err) {
-      const msg = (err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to delete product';
-      showToast(msg, 'error');
+      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to delete product', 'error');
       setDeleteConfirm(null);
     }
   };
-
-  const filtered = products.filter((p) => {
-    if (!search) return true;
-    const term = search.toLowerCase();
-    return (p.product_name?.toLowerCase() || '').includes(term);
-  });
-
-  if (loading) {
-    return <div className="text-gray-500">Loading products...</div>;
-  }
 
   return (
     <div>
@@ -96,7 +104,6 @@ export default function Products() {
         </div>
       )}
 
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h2 className="text-2xl font-bold text-gray-800">{isSalesperson ? 'Product Catalog' : 'Products'}</h2>
         {!isSalesperson && (
@@ -106,33 +113,33 @@ export default function Products() {
         )}
       </div>
 
-      {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap">
         <input
           type="text"
           placeholder="Search by name..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => handleSearch(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 w-full sm:w-64"
         />
         <div className="w-full sm:w-56">
           <SearchableSelect
             options={categories.map((c) => ({ value: c, label: c }))}
             value={categoryFilter}
-            onChange={setCategoryFilter}
+            onChange={handleCategory}
             placeholder="All Categories"
           />
         </div>
       </div>
 
-      {/* Table */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <p className="text-gray-500">Loading products...</p>
+      ) : products.length === 0 ? (
         <p className="text-gray-500">No products found.</p>
       ) : (
         <>
           {/* Mobile cards */}
           <div className="md:hidden space-y-3">
-            {filtered.map((product) => (
+            {products.map((product) => (
               <div key={product.id} className="bg-white rounded-lg shadow p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -143,14 +150,10 @@ export default function Products() {
                         <span className="text-xs font-bold text-gray-400">{product.product_name.charAt(0).toUpperCase()}</span>
                       </div>
                     )}
-                    <span className="font-medium text-gray-900">
-                      {product.product_name}
-                    </span>
+                    <span className="font-medium text-gray-900">{product.product_name}</span>
                   </div>
                   {!isSalesperson && (
-                    <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
-                      product.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                    }`}>
+                    <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${product.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                       {product.status}
                     </span>
                   )}
@@ -161,18 +164,10 @@ export default function Products() {
                     <span className="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700">{product.category}</span>
                   ) : '-'}
                 </div>
-                {!isSalesperson && (
-                  <div className="text-sm text-gray-500">
-                    <span className="text-gray-400">Stock:</span>{' '}
-                    <span className={`inline-block px-2 py-0.5 text-xs font-semibold rounded-full ${
-                      product.available_stock < (product.low_stock_threshold ?? 50) ? 'bg-red-100 text-red-700' :
-                      product.available_stock <= (product.low_stock_threshold ?? 50) * 4 ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-green-100 text-green-700'
-                    }`}>
-                      {formatStock(product.available_stock, product.unit, product.sub_unit, product.qty_per_box)}
-                    </span>
-                  </div>
-                )}
+                <div className="text-sm text-gray-500">
+                  <span className="text-gray-400">Unit:</span>{' '}
+                  {product.sub_unit ? `${product.unit} / ${product.sub_unit}` : product.unit}
+                </div>
                 {!isSalesperson && (
                   <div className="flex items-center gap-4 pt-2 border-t border-gray-100">
                     <Link to={`/products/${product.id}/edit`} className="text-yellow-600 hover:text-yellow-700 text-sm">Edit</Link>
@@ -191,9 +186,6 @@ export default function Products() {
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Product Name</th>
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                  {!isSalesperson && (
-                    <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
-                  )}
                   <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Unit</th>
                   {!isSalesperson && (
                     <>
@@ -204,7 +196,7 @@ export default function Products() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filtered.map((product) => (
+                {products.map((product) => (
                   <tr key={product.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       {product.image_url ? (
@@ -215,36 +207,19 @@ export default function Products() {
                         </div>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      {product.product_name}
-                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{product.product_name}</td>
                     <td className="px-6 py-4 text-sm">
                       {product.category ? (
-                        <span className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
-                          {product.category}
-                        </span>
+                        <span className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">{product.category}</span>
                       ) : '-'}
                     </td>
-                    {!isSalesperson && (
-                      <td className="px-6 py-4 text-right">
-                        <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
-                          product.available_stock < (product.low_stock_threshold ?? 50) ? 'bg-red-100 text-red-700' :
-                          product.available_stock <= (product.low_stock_threshold ?? 50) * 4 ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-green-100 text-green-700'
-                        }`}>
-                          {formatStock(product.available_stock, product.unit, product.sub_unit, product.qty_per_box)}
-                        </span>
-                      </td>
-                    )}
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {product.sub_unit ? `${product.unit} / ${product.sub_unit}` : product.unit}
                     </td>
                     {!isSalesperson && (
                       <>
                         <td className="px-6 py-4">
-                          <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
-                            product.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                          }`}>
+                          <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${product.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                             {product.status}
                           </span>
                         </td>
@@ -259,6 +234,8 @@ export default function Products() {
               </tbody>
             </table>
           </div>
+
+          <Pagination page={page} total={total} limit={limit} onPageChange={handlePageChange} onLimitChange={handleLimitChange} />
         </>
       )}
     </div>

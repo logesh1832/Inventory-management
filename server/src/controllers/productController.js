@@ -31,9 +31,8 @@ const createProduct = async (req, res, next) => {
 // GET /api/products
 const getAllProducts = async (req, res, next) => {
   try {
-    const { status, category } = req.query;
-    let query = `SELECT p.*, COALESCE(s.available_stock, 0)::int as available_stock
-                 FROM products p
+    const { status, category, search, page, limit } = req.query;
+    const base = `FROM products p
                  LEFT JOIN (
                    SELECT product_id, SUM(quantity_remaining) as available_stock
                    FROM inventory_batches WHERE quantity_remaining > 0
@@ -42,24 +41,31 @@ const getAllProducts = async (req, res, next) => {
     const params = [];
     const conditions = [];
 
-    if (status) {
-      params.push(status);
-      conditions.push(`p.status = $${params.length}`);
+    if (status) { params.push(status); conditions.push(`p.status = $${params.length}`); }
+    if (category) { params.push(category); conditions.push(`p.category = $${params.length}`); }
+    if (search) { params.push(`%${search}%`); conditions.push(`p.product_name ILIKE $${params.length}`); }
+
+    const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
+
+    // No page param = return all (for dropdowns/other pages)
+    if (!page) {
+      const result = await pool.query(
+        `SELECT p.*, COALESCE(s.available_stock, 0)::int as available_stock ${base}${where} ORDER BY p.created_at DESC`,
+        params
+      );
+      return res.json(result.rows);
     }
 
-    if (category) {
-      params.push(category);
-      conditions.push(`p.category = $${params.length}`);
-    }
+    const pg = Math.max(1, parseInt(page) || 1);
+    const lim = Math.min(100, Math.max(1, parseInt(limit) || 20));
+    const offset = (pg - 1) * lim;
 
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
+    const [dataRes, countRes] = await Promise.all([
+      pool.query(`SELECT p.*, COALESCE(s.available_stock, 0)::int as available_stock ${base}${where} ORDER BY p.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`, [...params, lim, offset]),
+      pool.query(`SELECT COUNT(*)::int as total FROM products p${where}`, params),
+    ]);
 
-    query += ' ORDER BY p.created_at DESC';
-
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    res.json({ data: dataRes.rows, total: countRes.rows[0].total });
   } catch (err) {
     next(err);
   }
