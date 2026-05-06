@@ -34,15 +34,8 @@ const createOrder = async (req, res, next) => {
       // Generate invoice number (skipped for hold orders)
       let invoiceNumber = null;
       if (!isHold) {
-        const lastOrder = await client.query(
-          "SELECT invoice_number FROM orders WHERE invoice_number IS NOT NULL ORDER BY created_at DESC LIMIT 1"
-        );
-        let nextNumber = 1;
-        if (lastOrder.rows.length > 0) {
-          const lastNum = parseInt(lastOrder.rows[0].invoice_number.replace(/^(INV-|MO-)/, ''), 10);
-          if (!isNaN(lastNum)) nextNumber = lastNum + 1;
-        }
-        invoiceNumber = `MO-${String(nextNumber).padStart(4, '0')}`;
+        const seqResult = await client.query("SELECT nextval('orders_invoice_seq') AS num");
+        invoiceNumber = `MO-${String(parseInt(seqResult.rows[0].num)).padStart(4, '0')}`;
       }
 
       const date = order_date || new Date().toISOString().split('T')[0];
@@ -561,15 +554,8 @@ const convertToMO = async (req, res, next) => {
         return res.status(400).json({ error: 'This hold order has expired' });
       }
       // Generate invoice number
-      const lastOrder = await client.query(
-        "SELECT invoice_number FROM orders WHERE invoice_number IS NOT NULL ORDER BY created_at DESC LIMIT 1"
-      );
-      let nextNumber = 1;
-      if (lastOrder.rows.length > 0) {
-        const lastNum = parseInt(lastOrder.rows[0].invoice_number.replace(/^(INV-|MO-)/, ''), 10);
-        if (!isNaN(lastNum)) nextNumber = lastNum + 1;
-      }
-      const invoiceNumber = `MO-${String(nextNumber).padStart(4, '0')}`;
+      const seqResult = await client.query("SELECT nextval('orders_invoice_seq') AS num");
+      const invoiceNumber = `MO-${String(parseInt(seqResult.rows[0].num)).padStart(4, '0')}`;
       const result = await client.query(
         "UPDATE orders SET invoice_number = $1, status = 'completed', expires_at = NULL WHERE id = $2 RETURNING *",
         [invoiceNumber, id]
