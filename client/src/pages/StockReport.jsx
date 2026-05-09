@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import Pagination from '../components/Pagination';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const stockBadge = (qty, threshold = 50) => {
   if (qty < threshold) return 'bg-red-100 text-red-700';
@@ -25,6 +28,7 @@ export default function StockReport() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [total, setTotal] = useState(0);
+  const [exporting, setExporting] = useState(false);
 
   const fetchStock = useCallback(async (pg, lim, lowStock, category, search) => {
     try {
@@ -78,19 +82,129 @@ export default function StockReport() {
     fetchStock(1, lim, lowStockOnly, selectedCategory, searchTerm);
   };
 
+  const fetchAllForExport = async () => {
+    const params = {};
+    if (lowStockOnly) params.low_stock = true;
+    if (selectedCategory) params.category = selectedCategory;
+    if (searchTerm) params.search = searchTerm;
+    const res = await api.get('/inventory/stock-report', { params });
+    return Array.isArray(res.data) ? res.data : res.data.data;
+  };
+
+  const stockStatus = (qty, threshold = 50) => {
+    if (qty < threshold) return 'Low';
+    if (qty <= threshold * 4) return 'Medium';
+    return 'Good';
+  };
+
+  const buildRows = (data) =>
+    data.map((p) => {
+      const qty = primaryStock(p);
+      const stockDisplay = p.sub_unit && p.qty_per_box
+        ? `${qty} ${p.unit}${p.total_stock % p.qty_per_box > 0 ? ` + ${p.total_stock % p.qty_per_box} ${p.sub_unit}` : ''}`
+        : `${qty} ${p.unit}`;
+      return {
+        'Product Name': p.product_name,
+        'Category': p.category || '-',
+        'Total Stock': stockDisplay,
+        'Unit': p.unit,
+        'Threshold': p.low_stock_threshold ?? 50,
+        'Status': stockStatus(qty, p.low_stock_threshold ?? 50),
+      };
+    });
+
+  const exportExcel = async () => {
+    setExporting(true);
+    try {
+      const data = await fetchAllForExport();
+      const rows = buildRows(data);
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 12 }, { wch: 10 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Stock Report');
+      const fileName = `stock-report${lowStockOnly ? '-low-stock' : ''}${selectedCategory ? `-${selectedCategory}` : ''}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+    } catch {
+      alert('Export failed. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const exportPDF = async () => {
+    setExporting(true);
+    try {
+      const data = await fetchAllForExport();
+      const rows = buildRows(data);
+      const doc = new jsPDF({ orientation: 'landscape' });
+
+      doc.setFontSize(14);
+      doc.text('Stock Report', 14, 15);
+      doc.setFontSize(9);
+      doc.setTextColor(120);
+      const subtitle = [
+        lowStockOnly ? 'Low Stock Only' : 'All Products',
+        selectedCategory ? `Category: ${selectedCategory}` : '',
+        searchTerm ? `Search: "${searchTerm}"` : '',
+      ].filter(Boolean).join('  |  ');
+      if (subtitle) doc.text(subtitle, 14, 22);
+
+      autoTable(doc, {
+        startY: subtitle ? 27 : 22,
+        head: [['Product Name', 'Category', 'Total Stock', 'Unit', 'Threshold', 'Status']],
+        body: rows.map((r) => Object.values(r)),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [234, 179, 8], textColor: 30, fontStyle: 'bold' },
+        didParseCell: (hookData) => {
+          if (hookData.column.index === 5 && hookData.section === 'body') {
+            const val = hookData.cell.raw;
+            if (val === 'Low') hookData.cell.styles.textColor = [185, 28, 28];
+            else if (val === 'Medium') hookData.cell.styles.textColor = [161, 98, 7];
+            else hookData.cell.styles.textColor = [21, 128, 61];
+          }
+        },
+      });
+
+      const fileName = `stock-report${lowStockOnly ? '-low-stock' : ''}${selectedCategory ? `-${selectedCategory}` : ''}.pdf`;
+      doc.save(fileName);
+    } catch {
+      alert('Export failed. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h2 className="text-2xl font-bold text-gray-800">Reports</h2>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={lowStockOnly}
-            onChange={handleLowStockToggle}
-            className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
-          />
-          <span className="text-sm font-medium text-gray-700">Low stock only</span>
-        </label>
+        <div className="flex items-center gap-3 flex-wrap">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={lowStockOnly}
+              onChange={handleLowStockToggle}
+              className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
+            />
+            <span className="text-sm font-medium text-gray-700">Low stock only</span>
+          </label>
+          <button
+            onClick={exportExcel}
+            disabled={exporting || loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-green-600 text-green-700 rounded hover:bg-green-50 disabled:opacity-50 transition-colors"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
+            {exporting ? 'Exporting...' : 'Excel'}
+          </button>
+          <button
+            onClick={exportPDF}
+            disabled={exporting || loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-red-500 text-red-600 rounded hover:bg-red-50 disabled:opacity-50 transition-colors"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
+            {exporting ? 'Exporting...' : 'PDF'}
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3 items-end">
