@@ -3,18 +3,36 @@ const pool = require('../config/db');
 // GET /api/categories
 const getAllCategories = async (req, res, next) => {
   try {
-    const { active } = req.query;
-    let query = 'SELECT * FROM categories';
+    const { active, search, page = 1, limit = 20 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    const conditions = [];
     const params = [];
+    let idx = 1;
 
     if (active === 'true') {
-      query += ' WHERE is_active = true';
+      conditions.push('is_active = true');
     }
 
-    query += ' ORDER BY category_name ASC';
+    if (search && search.trim()) {
+      conditions.push(`category_name ILIKE $${idx++}`);
+      params.push(`%${search.trim()}%`);
+    }
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const countResult = await pool.query(`SELECT COUNT(*) FROM categories ${where}`, params);
+    const total = parseInt(countResult.rows[0].count, 10);
+
+    params.push(parseInt(limit, 10));
+    params.push(offset);
+
+    const result = await pool.query(
+      `SELECT * FROM categories ${where} ORDER BY category_name ASC LIMIT $${idx++} OFFSET $${idx++}`,
+      params
+    );
+
+    res.json({ data: result.rows, total });
   } catch (err) {
     next(err);
   }
@@ -74,7 +92,7 @@ const updateCategory = async (req, res, next) => {
            is_active = COALESCE($3, is_active)
        WHERE id = $4
        RETURNING *`,
-      [category_name?.trim() || null, description?.trim() || null, is_active, id]
+      [category_name?.trim() || null, description?.trim() || null, is_active ?? null, id]
     );
 
     if (result.rows.length === 0) {
@@ -100,7 +118,6 @@ const deleteCategory = async (req, res, next) => {
       return res.status(404).json({ error: 'Category not found' });
     }
 
-    // Check if any products use this category
     const products = await pool.query(
       'SELECT id FROM products WHERE category = $1 LIMIT 1',
       [category.rows[0].category_name]

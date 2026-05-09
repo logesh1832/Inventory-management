@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import Pagination from '../components/Pagination';
 
 export default function Categories() {
   const { user } = useAuth();
@@ -13,27 +14,52 @@ export default function Categories() {
   const [form, setForm] = useState({ category_name: '', description: '' });
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [total, setTotal] = useState(0);
 
-  const canModify = user && ['admin', 'inventory'].includes(user.role);
+  const canModify = user && ['admin', 'inventory', 'manager'].includes(user.role);
 
-  const fetchCategories = async () => {
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const fetchCategories = useCallback(async (pg, lim, srch) => {
     try {
-      const { data } = await api.get('/categories');
-      setCategories(data);
+      setLoading(true);
+      const params = { page: pg, limit: lim };
+      if (srch) params.search = srch;
+      const { data } = await api.get('/categories', { params });
+      setCategories(data.data);
+      setTotal(data.total);
     } catch {
       showToast('Failed to load categories', 'error');
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchCategories();
   }, []);
 
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+  useEffect(() => {
+    fetchCategories(1, limit, '');
+  }, []);
+
+  const handleSearch = (val) => {
+    setSearch(val);
+    setPage(1);
+    fetchCategories(1, limit, val);
+  };
+
+  const handlePageChange = (pg) => {
+    setPage(pg);
+    fetchCategories(pg, limit, search);
+  };
+
+  const handleLimitChange = (lim) => {
+    setLimit(lim);
+    setPage(1);
+    fetchCategories(1, lim, search);
   };
 
   const resetForm = () => {
@@ -60,7 +86,6 @@ export default function Categories() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
-
     setSubmitting(true);
     try {
       if (editingId) {
@@ -77,9 +102,9 @@ export default function Categories() {
         showToast('Category created successfully');
       }
       resetForm();
-      fetchCategories();
+      fetchCategories(page, limit, search);
     } catch (err) {
-      const msg = (err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to save category';
+      const msg = err.response?.data?.error?.message || err.response?.data?.error || 'Failed to save category';
       showToast(msg, 'error');
     } finally {
       setSubmitting(false);
@@ -91,9 +116,9 @@ export default function Categories() {
       await api.delete(`/categories/${id}`);
       showToast('Category deleted successfully');
       setDeleteConfirm(null);
-      fetchCategories();
+      fetchCategories(page, limit, search);
     } catch (err) {
-      const msg = (err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to delete category';
+      const msg = err.response?.data?.error?.message || err.response?.data?.error || 'Failed to delete category';
       showToast(msg, 'error');
       setDeleteConfirm(null);
     }
@@ -103,16 +128,12 @@ export default function Categories() {
     try {
       await api.put(`/categories/${cat.id}`, { is_active: !cat.is_active });
       showToast(`Category ${cat.is_active ? 'deactivated' : 'activated'} successfully`);
-      fetchCategories();
+      fetchCategories(page, limit, search);
     } catch (err) {
-      const msg = (err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to update category';
+      const msg = err.response?.data?.error?.message || err.response?.data?.error || 'Failed to update category';
       showToast(msg, 'error');
     }
   };
-
-  if (loading) {
-    return <div className="text-gray-500">Loading categories...</div>;
-  }
 
   return (
     <div>
@@ -143,7 +164,7 @@ export default function Categories() {
         {canModify && !showForm && (
           <button
             onClick={() => { resetForm(); setShowForm(true); }}
-            className="px-4 py-2 bg-yellow-500 text-gray-900 rounded hover:bg-yellow-600 transition-colors"
+            className="px-4 py-2 bg-yellow-500 text-gray-900 font-semibold rounded hover:bg-yellow-400 transition-colors"
           >
             + Add Category
           </button>
@@ -156,7 +177,6 @@ export default function Categories() {
           <h3 className="text-lg font-semibold text-gray-800 mb-4">
             {editingId ? 'Edit Category' : 'New Category'}
           </h3>
-
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Category Name <span className="text-red-500">*</span>
@@ -172,7 +192,6 @@ export default function Categories() {
             />
             {errors.category_name && <p className="text-red-500 text-xs mt-1">{errors.category_name}</p>}
           </div>
-
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
             <textarea
@@ -182,29 +201,37 @@ export default function Categories() {
               className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500"
             />
           </div>
-
           <div className="flex gap-3">
             <button
               type="submit"
               disabled={submitting}
-              className="px-4 py-2 bg-yellow-500 text-gray-900 rounded hover:bg-yellow-600 disabled:opacity-50 transition-colors"
+              className="px-4 py-2 bg-yellow-500 text-gray-900 font-semibold rounded hover:bg-yellow-400 disabled:opacity-50 transition-colors"
             >
               {submitting ? 'Saving...' : editingId ? 'Update Category' : 'Create Category'}
             </button>
-            <button
-              type="button"
-              onClick={resetForm}
-              className="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200"
-            >
+            <button type="button" onClick={resetForm} className="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
               Cancel
             </button>
           </div>
         </form>
       )}
 
+      {/* Search */}
+      <div className="mb-4">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => handleSearch(e.target.value)}
+          placeholder="Search categories..."
+          className="w-full sm:w-72 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 text-sm"
+        />
+      </div>
+
       {/* Table */}
-      {categories.length === 0 ? (
-        <p className="text-gray-500">No categories found.</p>
+      {loading ? (
+        <div className="text-gray-500 py-8 text-center">Loading categories...</div>
+      ) : categories.length === 0 ? (
+        <p className="text-gray-500 py-8 text-center">No categories found.</p>
       ) : (
         <>
           {/* Mobile cards */}
@@ -213,9 +240,7 @@ export default function Categories() {
               <div key={cat.id} className="bg-white rounded-lg shadow p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-gray-900">{cat.category_name}</span>
-                  <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
-                    cat.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                  }`}>
+                  <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${cat.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                     {cat.is_active ? 'Active' : 'Inactive'}
                   </span>
                 </div>
@@ -254,16 +279,14 @@ export default function Categories() {
                     <td className="px-6 py-4 text-sm text-gray-900 font-medium">{cat.category_name}</td>
                     <td className="px-6 py-4 text-sm text-gray-500">{cat.description || '-'}</td>
                     <td className="px-6 py-4">
-                      <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
-                        cat.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                      }`}>
+                      <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${cat.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                         {cat.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
                     {canModify && (
-                      <td className="px-6 py-4 text-right">
-                        <button onClick={() => handleEdit(cat)} className="text-yellow-600 hover:text-yellow-700 text-sm mr-4">Edit</button>
-                        <button onClick={() => handleToggleActive(cat)} className="text-blue-500 hover:text-blue-700 text-sm mr-4">
+                      <td className="px-6 py-4 text-right space-x-4">
+                        <button onClick={() => handleEdit(cat)} className="text-yellow-600 hover:text-yellow-700 text-sm">Edit</button>
+                        <button onClick={() => handleToggleActive(cat)} className="text-blue-500 hover:text-blue-700 text-sm">
                           {cat.is_active ? 'Deactivate' : 'Activate'}
                         </button>
                         <button onClick={() => setDeleteConfirm(cat)} className="text-red-500 hover:text-red-700 text-sm">Delete</button>
@@ -274,6 +297,14 @@ export default function Categories() {
               </tbody>
             </table>
           </div>
+
+          <Pagination
+            page={page}
+            total={total}
+            limit={limit}
+            onPageChange={handlePageChange}
+            onLimitChange={handleLimitChange}
+          />
         </>
       )}
     </div>
