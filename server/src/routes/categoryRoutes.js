@@ -7,15 +7,15 @@ const {
   updateCategory,
   deleteCategory,
 } = require('../controllers/categoryController');
-const { requireRole } = require('../middleware/auth');
+const { requireCapability } = require('../middleware/auth');
 
 // All users can read categories
 router.get('/', getAllCategories);
 router.get('/:id', getCategoryById);
 
-// Only admin/inventory can modify
-router.post('/', requireRole('admin', 'inventory'), createCategory);
-router.put('/:id', requireRole('admin', 'inventory'), updateCategory);
-router.delete('/:id', requireRole('admin', 'inventory'), deleteCategory);
+// Admin or users with categories capability can modify
+router.post('/', requireCapability('categories'), createCategory);
+router.put('/:id', requireCapability('categories'), updateCategory);
+router.delete('/:id', requireCapability('categories'), deleteCategory);
 
 module.exports = router;

@@ -19,7 +19,7 @@ export default function Categories() {
   const [limit, setLimit] = useState(20);
   const [total, setTotal] = useState(0);
 
-  const canModify = user && ['admin', 'inventory', 'manager'].includes(user.role);
+  const canModify = user && (user.role === 'admin' || user.capabilities?.includes('categories'));
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
