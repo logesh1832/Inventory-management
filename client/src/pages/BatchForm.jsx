@@ -74,6 +74,7 @@ export default function BatchForm() {
   const qtyRefs = useRef({});
   const formRef = useRef(null);
   const dateRef = useRef(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     api.get('/products').then((res) => setProducts(res.data)).catch(() => {});
@@ -164,6 +165,7 @@ export default function BatchForm() {
     if (e.key === 'Enter') {
       e.preventDefault();
       if (e.shiftKey) {
+        e.stopPropagation();
         formRef.current?.requestSubmit();
       } else if (row.batch_tracking) {
         focusBatchToggle(row.id);
@@ -182,6 +184,7 @@ export default function BatchForm() {
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (e.shiftKey) {
+        e.stopPropagation();
         formRef.current?.requestSubmit();
       } else {
         focusBatchInput(row.id);
@@ -194,6 +197,7 @@ export default function BatchForm() {
     if (e.key === 'Enter') {
       e.preventDefault();
       if (e.shiftKey) {
+        e.stopPropagation();
         formRef.current?.requestSubmit();
       } else {
         focusMfd(row.id);
@@ -206,6 +210,7 @@ export default function BatchForm() {
     if (e.key === 'Enter') {
       e.preventDefault();
       if (e.shiftKey) {
+        e.stopPropagation();
         formRef.current?.requestSubmit();
       } else {
         focusExpiry(row.id);
@@ -218,6 +223,7 @@ export default function BatchForm() {
     if (e.key === 'Enter') {
       e.preventDefault();
       if (e.shiftKey) {
+        e.stopPropagation();
         formRef.current?.requestSubmit();
       } else {
         goToNextRowOrAdd(row.id);
@@ -268,8 +274,10 @@ export default function BatchForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submittingRef.current) return;
     if (!validate()) return;
 
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       const items = rows.map((r) => {
@@ -302,6 +310,7 @@ export default function BatchForm() {
       showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to save batches', 'error');
     } finally {
       setSubmitting(false);
+      submittingRef.current = false;
     }
   };
 
