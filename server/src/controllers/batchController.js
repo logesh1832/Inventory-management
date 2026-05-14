@@ -677,7 +677,7 @@ const deleteStockEntryGroup = async (req, res, next) => {
          LEFT JOIN inventory_batches ib ON ib.id = sm.batch_id
          WHERE sm.movement_type = 'IN'
            AND sm.voucher_number = $1
-         FOR UPDATE`,
+         FOR UPDATE OF sm`,
         [voucher_number]
       );
 
@@ -708,7 +708,7 @@ const deleteStockEntryGroup = async (req, res, next) => {
 
       for (const [batchId, adj] of Object.entries(batchAdjustments)) {
         const otherMovements = await client.query(
-          `SELECT id FROM stock_movements WHERE batch_id = $1 AND id != ALL($2::int[])`,
+          `SELECT id FROM stock_movements WHERE batch_id = $1 AND id != ALL($2::uuid[])`,
           [batchId, adj.movementIds]
         );
 
