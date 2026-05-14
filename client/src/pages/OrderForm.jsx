@@ -65,6 +65,7 @@ export default function OrderForm() {
 
   const formRef = useRef(null);
   const holdModeRef = useRef(false);
+  const submittingRef = useRef(false);
   const qtyRefs = useRef({});
   const dateRef = useRef(null);
 
@@ -342,7 +343,7 @@ export default function OrderForm() {
   const handleQtyKeyDown = (e, item) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (e.shiftKey) { formRef.current?.requestSubmit(); return; }
+      if (e.shiftKey) { e.stopPropagation(); formRef.current?.requestSubmit(); return; }
       if (item.useManualBatch && item.allocations.length > 0) {
         focusAllocBatch(item.allocations[0].id);
       } else {
@@ -355,7 +356,7 @@ export default function OrderForm() {
   const handleAllocQtyKeyDown = (e, item, allocIdx) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (e.shiftKey) { formRef.current?.requestSubmit(); return; }
+      if (e.shiftKey) { e.stopPropagation(); formRef.current?.requestSubmit(); return; }
 
       // If there are more existing alloc rows after this one, go to next
       if (allocIdx < item.allocations.length - 1) {
@@ -451,8 +452,10 @@ export default function OrderForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submittingRef.current) return;
     if (!validate()) return;
 
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       const payload = [];
@@ -510,6 +513,7 @@ export default function OrderForm() {
       showToast((err.response?.data?.error?.message || err.response?.data?.error) || `Failed to ${isEdit ? 'update' : 'create'} order`, 'error');
     } finally {
       setSubmitting(false);
+      submittingRef.current = false;
       holdModeRef.current = false;
     }
   };
