@@ -5,6 +5,7 @@ import SearchableSelect from '../components/SearchableSelect';
 import Pagination from '../components/Pagination';
 import { fmtDate } from '../utils/date';
 import DateInput from '../components/DateInput';
+import usePersistedSearchParams from '../utils/usePersistedSearchParams';
 
 const today = () => new Date().toISOString().split('T')[0];
 const monthStart = () => {
@@ -12,24 +13,49 @@ const monthStart = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 };
 
+// Aggregate carton total for an order → "N <unit> + M <sub-unit>".
+// Uses the product's real unit names for single-product orders (box_label /
+// loose_label from the API); generic Box/Pcs for mixed-product orders.
+const fmtBoxLoose = (o) => {
+  const boxes = Number(o.total_boxes) || 0;
+  const loose = Number(o.total_loose) || 0;
+  if (boxes === 0 && loose === 0) return '—';
+  const parts = [];
+  if (boxes > 0) parts.push(`${boxes} ${o.box_label || (boxes === 1 ? 'Box' : 'Boxes')}`);
+  if (loose > 0 || boxes === 0) parts.push(`${loose} ${o.loose_label || 'Pcs'}`);
+  return parts.join(' + ');
+};
+
 export default function Orders() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams, pendingRestore] = usePersistedSearchParams('mo_filters');
+  const filters = {
+    customer_id: searchParams.get('customer_id') || '',
+    product_id: searchParams.get('product_id') || '',
+    status: searchParams.get('status') || '',
+    from_date: searchParams.get('from_date') || '',
+    to_date: searchParams.get('to_date') || '',
+  };
+  const page = parseInt(searchParams.get('page') || '1', 10);
+  const limit = parseInt(searchParams.get('limit') || '20', 10);
   const [orders, setOrders] = useState([]);
   const [total, setTotal] = useState(0);
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
-  const [filters, setFilters] = useState({
-    customer_id: '',
-    product_id: '',
-    status: '',
-    from_date: '',
-    to_date: '',
-  });
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(20);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+
+  const updateParams = (updates) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      Object.entries(updates).forEach(([k, v]) => {
+        if (v) next.set(k, String(v));
+        else next.delete(k);
+      });
+      return next;
+    });
+  };
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -56,25 +82,24 @@ export default function Orders() {
   useEffect(() => {
     api.get('/customers').then((res) => setCustomers(res.data)).catch(() => {});
     api.get('/products').then((res) => setProducts(res.data)).catch(() => {});
-    fetchOrders(filters, 1, limit);
   }, []);
 
+  useEffect(() => {
+    if (pendingRestore) return; // wait for persisted filters to restore, then fetch once
+    fetchOrders(filters, page, limit);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.customer_id, filters.product_id, filters.status, filters.from_date, filters.to_date, page, limit, pendingRestore]);
+
   const handleFilterChange = (e) => {
-    const updated = { ...filters, [e.target.name]: e.target.value };
-    setFilters(updated);
-    setPage(1);
-    fetchOrders(updated, 1, limit);
+    updateParams({ [e.target.name]: e.target.value, page: null });
   };
 
   const handlePageChange = (pg) => {
-    setPage(pg);
-    fetchOrders(filters, pg, limit);
+    updateParams({ page: pg });
   };
 
   const handleLimitChange = (newLimit) => {
-    setLimit(newLimit);
-    setPage(1);
-    fetchOrders(filters, 1, newLimit);
+    updateParams({ limit: newLimit, page: null });
   };
 
   const handleDeleteOrder = async (orderId, invoiceNumber) => {
@@ -82,7 +107,7 @@ export default function Orders() {
     try {
       await api.delete(`/orders/${orderId}`);
       showToast('Order deleted successfully');
-      fetchOrders(filters, page);
+      fetchOrders(filters, page, limit);
     } catch (err) {
       showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to delete order', 'error');
     }
@@ -265,6 +290,10 @@ export default function Orders() {
                 <span className="text-gray-400">Customer:</span> {o.customer_name}
                 {o.party_name && <span className="text-xs text-gray-400 ml-1">({o.party_name})</span>}
               </div>
+              <div className="text-sm text-gray-500">
+                <span className="text-gray-400">Qty:</span>{' '}
+                <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs font-semibold">{fmtBoxLoose(o)}</span>
+              </div>
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-500">
                   <span className="text-gray-400">Date:</span> {fmtDate(o.order_date)}
@@ -296,6 +325,7 @@ export default function Orders() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invoice #</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order Date</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Qty</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
@@ -321,6 +351,11 @@ export default function Orders() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {fmtDate(o.order_date)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs font-semibold" title={o.total_qty != null ? `${o.total_qty} pcs` : undefined}>
+                      {fmtBoxLoose(o)}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {statusBadge(o)}

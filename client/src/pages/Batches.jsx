@@ -5,6 +5,7 @@ import SearchableSelect from '../components/SearchableSelect';
 import Pagination from '../components/Pagination';
 import { fmtDate } from '../utils/date';
 import DateInput from '../components/DateInput';
+import usePersistedSearchParams from '../utils/usePersistedSearchParams';
 
 const today = () => new Date().toISOString().split('T')[0];
 const monthStart = () => {
@@ -13,24 +14,50 @@ const monthStart = () => {
 };
 const toDateStr = (d) => d ? new Date(d).toISOString().split('T')[0] : '';
 
+// Format a voucher's aggregate total as "N <unit> + M <sub-unit>".
+// Uses the product's real unit names for single-product vouchers (box_label /
+// loose_label from the API); falls back to generic Box/Pcs for mixed vouchers,
+// and to raw pieces when box/loose wasn't computed (e.g. no voucher number).
+const fmtBoxLoose = (g) => {
+  if (g.total_boxes == null) return `${g.total_quantity}`;
+  const boxes = Number(g.total_boxes) || 0;
+  const loose = Number(g.total_loose) || 0;
+  const parts = [];
+  if (boxes > 0) parts.push(`${boxes} ${g.box_label || (boxes === 1 ? 'Box' : 'Boxes')}`);
+  if (loose > 0 || boxes === 0) parts.push(`${loose} ${g.loose_label || 'Pcs'}`);
+  return parts.join(' + ');
+};
+
 export default function Batches() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState('entries'); // 'entries' | 'batches'
+  const [searchParams, setSearchParams, pendingRestore] = usePersistedSearchParams('mi_filters');
+  const tab = searchParams.get('tab') || 'entries';
+  const filterProductId = searchParams.get('product_id') || '';
+  const filterSupplierId = searchParams.get('supplier_id') || '';
+  const fromDate = searchParams.get('from_date') || '';
+  const toDate = searchParams.get('to_date') || '';
+  const page = parseInt(searchParams.get('page') || '1', 10);
+  const limit = parseInt(searchParams.get('limit') || '20', 10);
   const [entries, setEntries] = useState([]);
   const [entriesTotal, setEntriesTotal] = useState(0);
   const [batches, setBatches] = useState([]);
   const [batchesTotal, setBatchesTotal] = useState(0);
   const [products, setProducts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
-  const [filterProductId, setFilterProductId] = useState('');
-  const [filterSupplierId, setFilterSupplierId] = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(20);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+
+  const updateParams = (updates) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      Object.entries(updates).forEach(([k, v]) => {
+        if (v) next.set(k, String(v));
+        else next.delete(k);
+      });
+      return next;
+    });
+  };
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -67,20 +94,17 @@ export default function Batches() {
   };
 
   useEffect(() => {
-    setPage(1);
-    fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, 1, limit);
+    if (pendingRestore) return; // wait for persisted filters to restore, then fetch once
+    fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, page, limit);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, filterProductId, filterSupplierId, fromDate, toDate]);
+  }, [tab, filterProductId, filterSupplierId, fromDate, toDate, page, limit, pendingRestore]);
 
   const handlePageChange = (pg) => {
-    setPage(pg);
-    fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, pg, limit);
+    updateParams({ page: pg });
   };
 
   const handleLimitChange = (newLimit) => {
-    setLimit(newLimit);
-    setPage(1);
-    fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, 1, newLimit);
+    updateParams({ limit: newLimit, page: null });
   };
 
   // Reset selectedIndex when entries data changes
@@ -133,7 +157,7 @@ export default function Batches() {
     try {
       await api.delete('/batches/stock-entry-group', { params: { voucher_number: voucherNumber } });
       showToast('Stock entries deleted successfully');
-      fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, page);
+      fetchData(tab, filterProductId, filterSupplierId, fromDate, toDate, page, limit);
     } catch (err) {
       showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to delete stock entries', 'error');
     }
@@ -164,7 +188,7 @@ export default function Batches() {
       {/* Tabs */}
       <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit">
         <button
-          onClick={() => setTab('entries')}
+          onClick={() => updateParams({ tab: 'entries', page: null })}
           className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
             tab === 'entries' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
           }`}
@@ -172,7 +196,7 @@ export default function Batches() {
           Stock Entries
         </button>
         <button
-          onClick={() => setTab('batches')}
+          onClick={() => updateParams({ tab: 'batches', page: null })}
           className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
             tab === 'batches' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
           }`}
@@ -188,7 +212,7 @@ export default function Batches() {
           <SearchableSelect
             options={products.map((p) => ({ value: p.id, label: p.product_name }))}
             value={filterProductId}
-            onChange={setFilterProductId}
+            onChange={(val) => updateParams({ product_id: val, page: null })}
             placeholder="All Products"
           />
         </div>
@@ -198,7 +222,7 @@ export default function Batches() {
             <SearchableSelect
               options={suppliers.map((s) => ({ value: s.id, label: s.customer_name }))}
               value={filterSupplierId}
-              onChange={setFilterSupplierId}
+              onChange={(val) => updateParams({ supplier_id: val, page: null })}
               placeholder="All Suppliers"
             />
           </div>
@@ -207,7 +231,7 @@ export default function Batches() {
           <label className="block text-xs font-medium text-gray-500 mb-1">From Date</label>
           <DateInput
             value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
+            onChange={(e) => updateParams({ from_date: e.target.value, page: null })}
             className="border border-gray-300 rounded px-3 py-2 w-full sm:w-40 text-sm"
           />
         </div>
@@ -215,7 +239,7 @@ export default function Batches() {
           <label className="block text-xs font-medium text-gray-500 mb-1">To Date</label>
           <DateInput
             value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
+            onChange={(e) => updateParams({ to_date: e.target.value, page: null })}
             className="border border-gray-300 rounded px-3 py-2 w-full sm:w-40 text-sm"
           />
         </div>
@@ -252,8 +276,8 @@ export default function Batches() {
                     <span className="font-medium text-gray-900">{g.supplier_name}</span>
                     {g.party_name && <span className="text-xs text-gray-400 ml-1">({g.party_name})</span>}
                   </div>
-                  <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-semibold">
-                    +{g.total_quantity}
+                  <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-semibold" title={`${g.total_quantity} pcs`}>
+                    +{fmtBoxLoose(g)}
                   </span>
                 </div>
                 {g.voucher_number && (
@@ -325,8 +349,8 @@ export default function Batches() {
                       </span>
                     </td>
                     <td className="px-5 py-3 text-sm">
-                      <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-semibold">
-                        +{g.total_quantity}
+                      <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-semibold" title={`${g.total_quantity} pcs`}>
+                        +{fmtBoxLoose(g)}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-sm">

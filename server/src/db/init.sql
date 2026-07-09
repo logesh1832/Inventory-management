@@ -203,6 +203,14 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'party_name') THEN
         ALTER TABLE orders ADD COLUMN party_name TEXT;
     END IF;
+    -- orders: created_by (who created the order)
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'created_by') THEN
+        ALTER TABLE orders ADD COLUMN created_by UUID REFERENCES users(id) ON DELETE SET NULL;
+    END IF;
+    -- stock_movements: created_by (who created the movement / MI voucher)
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'stock_movements' AND column_name = 'created_by') THEN
+        ALTER TABLE stock_movements ADD COLUMN created_by UUID REFERENCES users(id) ON DELETE SET NULL;
+    END IF;
 END $$;
 
 -- ============================================

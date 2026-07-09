@@ -50,9 +50,9 @@ const createBatch = async (req, res, next) => {
       const batch = batchResult.rows[0];
 
       await client.query(
-        `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date, voucher_number, reference_number, party_name)
-         VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5, $6, $7, $8)`,
-        [product_id, batch.id, quantity_received, supplier_id || null, received_date, voucherNumber, reference_number || null, party_name || null]
+        `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date, voucher_number, reference_number, party_name, created_by)
+         VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5, $6, $7, $8, $9)`,
+        [product_id, batch.id, quantity_received, supplier_id || null, received_date, voucherNumber, reference_number || null, party_name || null, req.user ? req.user.id : null]
       );
 
       await client.query('COMMIT');
@@ -127,9 +127,9 @@ const createBulkBatches = async (req, res, next) => {
 
           // Each stock entry records the supplier separately
           await client.query(
-            `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date, voucher_number, reference_number, party_name)
-             VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5, $6, $7, $8)`,
-            [batch.product_id, batch.id, qty, supplier_id, received_date, voucherNumber, reference_number || null, party_name || null]
+            `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date, voucher_number, reference_number, party_name, created_by)
+             VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5, $6, $7, $8, $9)`,
+            [batch.product_id, batch.id, qty, supplier_id, received_date, voucherNumber, reference_number || null, party_name || null, req.user ? req.user.id : null]
           );
 
           results.push({ action: 'updated', batch });
@@ -147,9 +147,9 @@ const createBulkBatches = async (req, res, next) => {
           const batch = batchResult.rows[0];
 
           await client.query(
-            `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date, voucher_number, reference_number, party_name)
-             VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5, $6, $7, $8)`,
-            [item.product_id, batch.id, qty, supplier_id, received_date, voucherNumber, reference_number || null, party_name || null]
+            `INSERT INTO stock_movements (product_id, batch_id, quantity, movement_type, reference_type, reference_id, supplier_id, received_date, voucher_number, reference_number, party_name, created_by)
+             VALUES ($1, $2, $3, 'IN', 'BATCH', $2, $4, $5, $6, $7, $8, $9)`,
+            [item.product_id, batch.id, qty, supplier_id, received_date, voucherNumber, reference_number || null, party_name || null, req.user ? req.user.id : null]
           );
 
           results.push({ action: 'created', batch });
@@ -541,7 +541,53 @@ const getStockEntryGroups = async (req, res, next) => {
     `;
 
     const result = await pool.query(dataQuery, dataParams);
-    res.json({ data: result.rows, total, page: Number(page), limit: Number(limit) });
+    const groups = result.rows;
+
+    // Aggregate box + loose totals per voucher (carton count = Σ floor(qty/qty_per_box)
+    // per product, loose = Σ leftover pcs; products with no box config count as loose).
+    const voucherNumbers = groups.map((g) => g.voucher_number).filter((v) => v != null);
+    if (voucherNumbers.length > 0) {
+      const blParams = [...params, voucherNumbers];
+      const blWhere = ' WHERE ' + [...conditions, `sm.voucher_number = ANY($${blParams.length})`].join(' AND ');
+      const blResult = await pool.query(
+        `SELECT sm.voucher_number, p.unit, p.sub_unit, p.qty_per_box, SUM(sm.quantity) AS prod_qty
+         FROM stock_movements sm
+         JOIN products p ON p.id = sm.product_id
+         ${blWhere}
+         GROUP BY sm.voucher_number, sm.product_id, p.unit, p.sub_unit, p.qty_per_box`,
+        blParams
+      );
+
+      const boxMap = {};
+      for (const row of blResult.rows) {
+        const key = row.voucher_number;
+        if (!boxMap[key]) boxMap[key] = { boxes: 0, loose: 0, productCount: 0, unit: null, subUnit: null, qpb: null };
+        const b = boxMap[key];
+        b.productCount += 1;
+        if (b.productCount === 1) { b.unit = row.unit; b.subUnit = row.sub_unit; b.qpb = row.qty_per_box; }
+        const qty = Number(row.prod_qty) || 0;
+        if (row.sub_unit && row.qty_per_box) {
+          b.boxes += Math.floor(qty / row.qty_per_box);
+          b.loose += qty % row.qty_per_box;
+        } else {
+          b.loose += qty;
+        }
+      }
+
+      for (const g of groups) {
+        const bl = boxMap[g.voucher_number];
+        g.total_boxes = bl ? bl.boxes : null;
+        g.total_loose = bl ? bl.loose : null;
+        // Real unit labels only when this (filtered) voucher is a single product;
+        // multi-product vouchers keep the generic Box/Pcs labels.
+        const single = bl && bl.productCount === 1;
+        const hasBox = single && bl.subUnit && bl.qpb > 0;
+        g.box_label = hasBox ? bl.unit : null;                               // null → generic "Box(es)"
+        g.loose_label = single ? (hasBox ? bl.subUnit : bl.unit) : null;     // null → generic "Pcs"
+      }
+    }
+
+    res.json({ data: groups, total, page: Number(page), limit: Number(limit) });
   } catch (err) {
     next(err);
   }
@@ -562,11 +608,13 @@ const getStockEntriesByGroup = async (req, res, next) => {
               sm.product_id, sm.batch_id,
               p.product_name, p.product_code, p.batch_tracking, p.unit, p.sub_unit, p.qty_per_box, p.image_url,
               ib.batch_number, ib.manufacture_date, ib.expiry_date,
-              c.customer_name AS supplier_name
+              c.customer_name AS supplier_name,
+              u.name AS created_by_name
        FROM stock_movements sm
        JOIN products p ON p.id = sm.product_id
        LEFT JOIN inventory_batches ib ON ib.id = sm.batch_id
        LEFT JOIN customers c ON c.id = sm.supplier_id
+       LEFT JOIN users u ON u.id = sm.created_by
        WHERE sm.movement_type = 'IN'
          AND sm.voucher_number = $1
        ORDER BY sm.created_at ASC`,

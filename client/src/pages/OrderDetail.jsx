@@ -2,12 +2,10 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import api, { getFileUrl } from '../services/api';
 import { fmtDate } from '../utils/date';
-import { useAuth } from '../context/AuthContext';
 
 export default function OrderDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
@@ -199,7 +197,7 @@ export default function OrderDetail() {
             </div>
             <div className="text-right">
               <p className="text-xs text-gray-700">Dispatch Date : <span className="font-semibold">{fmtDate(order.order_date)}</span></p>
-              {user && <p className="text-xs text-gray-500">Created By : {user.name}</p>}
+              {order.created_by_name && <p className="text-xs text-gray-500">Created By : {order.created_by_name}</p>}
             </div>
           </div>
 

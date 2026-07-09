@@ -72,6 +72,71 @@ const getStockMovements = async (req, res, next) => {
   }
 };
 
+// GET /api/inventory/movements-summary
+// Returns per-day IN/OUT totals (aggregated in SQL so it never pulls raw rows,
+// which keeps it fast over years of data). The frontend rolls these small
+// day-totals up into the selected period buckets (weekly/monthly/yearly/...).
+const getMovementsSummary = async (req, res, next) => {
+  try {
+    const { product_id, movement_type, from_date, to_date } = req.query;
+
+    // Exclude legacy IN movements without a supplier (same rule as the list).
+    const conditions = ["NOT (sm.movement_type = 'IN' AND sm.supplier_id IS NULL)"];
+    const params = [];
+
+    if (product_id) {
+      params.push(product_id);
+      conditions.push(`sm.product_id = $${params.length}`);
+    }
+    if (movement_type) {
+      params.push(movement_type);
+      conditions.push(`sm.movement_type = $${params.length}`);
+    }
+    if (from_date) {
+      params.push(from_date);
+      conditions.push(`sm.created_at >= $${params.length}::date`);
+    }
+    if (to_date) {
+      params.push(to_date);
+      conditions.push(`sm.created_at < ($${params.length}::date + interval '1 day')`);
+    }
+
+    const whereClause = ' WHERE ' + conditions.join(' AND ');
+
+    // Aggregate per (day, product): keeps qty_per_box so the frontend can roll
+    // days into period buckets AND compute aggregate box + loose per product.
+    const dayResult = await pool.query(
+      `SELECT TO_CHAR(sm.created_at, 'YYYY-MM-DD') AS day,
+              sm.product_id, p.qty_per_box, p.sub_unit,
+              COALESCE(SUM(CASE WHEN sm.movement_type = 'IN' THEN sm.quantity ELSE 0 END), 0)::int AS in_qty,
+              COALESCE(SUM(CASE WHEN sm.movement_type = 'OUT' THEN sm.quantity ELSE 0 END), 0)::int AS out_qty
+       FROM stock_movements sm
+       JOIN products p ON p.id = sm.product_id
+       ${whereClause}
+       GROUP BY TO_CHAR(sm.created_at, 'YYYY-MM-DD'), sm.product_id, p.qty_per_box, p.sub_unit
+       ORDER BY day DESC`,
+      params
+    );
+
+    const days = dayResult.rows;
+    const total_in = days.reduce((s, r) => s + r.in_qty, 0);
+    const total_out = days.reduce((s, r) => s + r.out_qty, 0);
+
+    let product = null;
+    if (product_id) {
+      const pr = await pool.query(
+        'SELECT product_name, unit, sub_unit, qty_per_box FROM products WHERE id = $1',
+        [product_id]
+      );
+      product = pr.rows[0] || null;
+    }
+
+    res.json({ days, total_in, total_out, product });
+  } catch (err) {
+    next(err);
+  }
+};
+
 const getLiveStock = async (req, res, next) => {
   try {
     const result = await pool.query(`
@@ -416,4 +481,4 @@ const getProductMovements = async (req, res, next) => {
   }
 };
 
-module.exports = { getStockMovements, getLiveStock, getLiveStockByProduct, getStockReport, getDashboardStats, getMovementsBySupplier, getMovementsByCustomer, getProductMovements };
+module.exports = { getStockMovements, getMovementsSummary, getLiveStock, getLiveStockByProduct, getStockReport, getDashboardStats, getMovementsBySupplier, getMovementsByCustomer, getProductMovements };

@@ -2,12 +2,10 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
 import { fmtDate } from '../utils/date';
-import { useAuth } from '../context/AuthContext';
 
 export default function MaterialInDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const voucherNumber = searchParams.get('voucher');
 
   const [entries, setEntries] = useState([]);
@@ -48,8 +46,29 @@ export default function MaterialInDetail() {
   const supplierName = entries.length > 0 ? entries[0].supplier_name : '';
   const referenceNumber = entries.length > 0 ? entries[0].reference_number : '';
   const partyName = entries.length > 0 ? entries[0].party_name : '';
-  const totalQty = entries.reduce((sum, e) => sum + e.quantity, 0);
+  const createdByName = entries.length > 0 ? entries[0].created_by_name : '';
   const firstEntryId = entries.length > 0 ? entries[0].id : null;
+
+  // Aggregate carton total: Σ full boxes across products + Σ leftover loose pcs
+  // (products without a box config count entirely as loose).
+  const totals = entries.reduce((a, e) => {
+    const qty = Number(e.quantity) || 0;
+    a.totalPcs += qty;
+    if (e.sub_unit && e.qty_per_box) {
+      a.boxes += Math.floor(qty / e.qty_per_box);
+      a.loose += qty % e.qty_per_box;
+    } else {
+      a.loose += qty;
+    }
+    return a;
+  }, { boxes: 0, loose: 0, totalPcs: 0 });
+
+  const totalLabel = (() => {
+    const parts = [];
+    if (totals.boxes > 0) parts.push(`${totals.boxes} ${totals.boxes === 1 ? 'Box' : 'Boxes'}`);
+    if (totals.loose > 0 || totals.boxes === 0) parts.push(`${totals.loose} Pcs`);
+    return parts.join(' + ');
+  })();
 
   // qty is stored in primary unit (Boxes) for MI
   // qty is stored in PCS (sub-unit) after migration; convert to Box display
@@ -156,7 +175,7 @@ export default function MaterialInDetail() {
             </div>
             <div className="text-right">
               <p className="text-xs text-gray-700">Received Date : <span className="font-semibold">{fmtDate(entries[0]?.received_date)}</span></p>
-              {user && <p className="text-xs text-gray-500">Created By : {user.name}</p>}
+              {createdByName && <p className="text-xs text-gray-500">Created By : {createdByName}</p>}
             </div>
           </div>
 
@@ -242,7 +261,8 @@ export default function MaterialInDetail() {
               <tr className="bg-gray-50">
                 <td colSpan={4} className="px-4 py-2 text-sm font-semibold text-gray-700 text-right">Total</td>
                 <td className="px-4 py-2 text-sm text-right">
-                  <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-bold">+{totalQty}</span>
+                  <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-bold">+{totalLabel}</span>
+                  <span className="text-gray-400 text-[10px] ml-1">({totals.totalPcs} pcs)</span>
                 </td>
                 <td></td>
               </tr>

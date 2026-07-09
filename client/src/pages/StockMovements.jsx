@@ -1,268 +1,210 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import SearchableSelect from '../components/SearchableSelect';
 import { fmtDate } from '../utils/date';
 import DateInput from '../components/DateInput';
 
-const toISO = (d) => d.toISOString().split('T')[0];
-
-// PCS → "X Box + Y PCS" display
-const formatQty = (qty, unit, subUnit, qtyPerBox) => {
-  if (!subUnit || !qtyPerBox || qtyPerBox <= 0) return { text: `${qty}`, unit: unit || '' };
-  const boxes = Math.floor(qty / qtyPerBox);
-  const remaining = qty % qtyPerBox;
-  if (boxes === 0) return { text: `${remaining}`, unit: subUnit };
-  if (remaining === 0) return { text: `${boxes}`, unit };
-  return { text: `${boxes} ${unit} + ${remaining}`, unit: subUnit };
-};
-
-// FY helpers
-const getFYStart = (fyYear) => {
-  const y = fyYear ?? (new Date().getMonth() >= 3 ? new Date().getFullYear() : new Date().getFullYear() - 1);
-  return new Date(y, 3, 1);
-};
-const getFYEnd = (fyYear) => new Date(getFYStart(fyYear).getFullYear() + 1, 2, 31);
-
-const currentFYYear = () => {
-  const now = new Date();
-  return now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
-};
-
-const generateFYOptions = () => {
-  const cur = currentFYYear();
-  const opts = [];
-  for (let y = 2023; y <= cur; y++) {
-    opts.push({ value: y, label: `${y}-${String(y + 1).slice(-2)}` });
-  }
-  return opts;
-};
-
-// ─── Grouping functions ───────────────────────────────────────────────────────
-
-const groupByProduct = (data) => {
-  const map = {};
-  data.forEach((m) => {
-    const key = m.product_id;
-    if (!map[key]) map[key] = {
-      label: m.product_name, sortKey: m.product_name,
-      inQty: 0, outQty: 0, unit: m.unit, sub_unit: m.sub_unit, qty_per_box: m.qty_per_box,
-    };
-    if (m.movement_type === 'IN') map[key].inQty += m.quantity;
-    else map[key].outQty += m.quantity;
-  });
-  return Object.values(map).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-};
-
-const groupByDate = (data) => {
-  const map = {};
-  data.forEach((m) => {
-    const d = toISO(new Date(m.created_at));
-    if (!map[d]) map[d] = { label: fmtDate(d + 'T00:00'), sortKey: d, inQty: 0, outQty: 0 };
-    if (m.movement_type === 'IN') map[d].inQty += m.quantity;
-    else map[d].outQty += m.quantity;
-  });
-  return Object.values(map).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-};
-
-const groupByWeek = (data, fyYear) => {
-  const fyStart = getFYStart(fyYear);
-  const weeks = {};
-  for (let w = 1; w <= 52; w++) {
-    const wStart = new Date(fyStart);
-    wStart.setDate(fyStart.getDate() + (w - 1) * 7);
-    const wEnd = new Date(wStart);
-    wEnd.setDate(wStart.getDate() + 6);
-    weeks[w] = {
-      label: `Week ${w} (${fmtDate(toISO(wStart) + 'T00:00')} – ${fmtDate(toISO(wEnd) + 'T00:00')})`,
-      sortKey: w, inQty: 0, outQty: 0,
-    };
-  }
-  data.forEach((m) => {
-    const d = new Date(m.created_at);
-    const diff = Math.floor((d - fyStart) / (1000 * 60 * 60 * 24));
-    const week = Math.floor(diff / 7) + 1;
-    if (week >= 1 && week <= 52) {
-      if (m.movement_type === 'IN') weeks[week].inQty += m.quantity;
-      else weeks[week].outQty += m.quantity;
-    }
-  });
-  return Object.values(weeks).filter((r) => r.inQty > 0 || r.outQty > 0);
-};
-
-const groupByMonth = (data, fyYear) => {
-  const map = {};
-  // Pre-fill all 12 months of the FY
-  const fyStart = getFYStart(fyYear);
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(fyStart.getFullYear(), fyStart.getMonth() + i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    map[key] = { label: d.toLocaleString('default', { month: 'long', year: 'numeric' }), sortKey: key, inQty: 0, outQty: 0 };
-  }
-  data.forEach((m) => {
-    const d = new Date(m.created_at);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    if (map[key]) {
-      if (m.movement_type === 'IN') map[key].inQty += m.quantity;
-      else map[key].outQty += m.quantity;
-    }
-  });
-  return Object.values(map).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-};
-
-const groupByQuarter = (data, fyYear) => {
-  const fy = getFYStart(fyYear).getFullYear();
-  // Q1: Apr-Jun, Q2: Jul-Sep, Q3: Oct-Dec, Q4: Jan-Mar
-  const quarters = [
-    { key: 'Q1', label: `Q1 (Apr–Jun ${fy})`,   months: [[fy, 3],[fy, 4],[fy, 5]] },
-    { key: 'Q2', label: `Q2 (Jul–Sep ${fy})`,   months: [[fy, 6],[fy, 7],[fy, 8]] },
-    { key: 'Q3', label: `Q3 (Oct–Dec ${fy})`,   months: [[fy, 9],[fy, 10],[fy, 11]] },
-    { key: 'Q4', label: `Q4 (Jan–Mar ${fy + 1})`, months: [[fy+1, 0],[fy+1, 1],[fy+1, 2]] },
-  ];
-  const map = {};
-  quarters.forEach((q) => { map[q.key] = { label: q.label, sortKey: q.key, inQty: 0, outQty: 0, months: q.months }; });
-  data.forEach((m) => {
-    const d = new Date(m.created_at);
-    const yr = d.getFullYear(); const mo = d.getMonth();
-    for (const q of quarters) {
-      if (q.months.some(([y, mn]) => y === yr && mn === mo)) {
-        if (m.movement_type === 'IN') map[q.key].inQty += m.quantity;
-        else map[q.key].outQty += m.quantity;
-        break;
-      }
-    }
-  });
-  return Object.values(map);
-};
-
-const groupByHalfYear = (data, fyYear) => {
-  const fy = getFYStart(fyYear).getFullYear();
-  const halves = [
-    { key: 'H1', label: `H1 (Apr–Sep ${fy})`,     months: [[fy,3],[fy,4],[fy,5],[fy,6],[fy,7],[fy,8]] },
-    { key: 'H2', label: `H2 (Oct–Mar ${fy}–${fy+1})`, months: [[fy,9],[fy,10],[fy,11],[fy+1,0],[fy+1,1],[fy+1,2]] },
-  ];
-  const map = {};
-  halves.forEach((h) => { map[h.key] = { label: h.label, sortKey: h.key, inQty: 0, outQty: 0, months: h.months }; });
-  data.forEach((m) => {
-    const d = new Date(m.created_at);
-    const yr = d.getFullYear(); const mo = d.getMonth();
-    for (const h of halves) {
-      if (h.months.some(([y, mn]) => y === yr && mn === mo)) {
-        if (m.movement_type === 'IN') map[h.key].inQty += m.quantity;
-        else map[h.key].outQty += m.quantity;
-        break;
-      }
-    }
-  });
-  return Object.values(map);
-};
-
-const groupByFY = (data) => {
-  const map = {};
-  data.forEach((m) => {
-    const d = new Date(m.created_at);
-    const fy = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1;
-    const label = `${fy}-${String(fy + 1).slice(-2)}`;
-    if (!map[fy]) map[fy] = { label, sortKey: fy, inQty: 0, outQty: 0 };
-    if (m.movement_type === 'IN') map[fy].inQty += m.quantity;
-    else map[fy].outQty += m.quantity;
-  });
-  return Object.values(map).sort((a, b) => a.sortKey - b.sortKey);
-};
-
-// ─── Component ────────────────────────────────────────────────────────────────
-
-const PERIODS_WITH_FY = ['weekly', 'monthly', 'quarterly', 'half_yearly'];
+const nf = (n) => Number(n || 0).toLocaleString('en-IN');
 
 const COL_HEADER = {
   daily: 'Date', weekly: 'Week', monthly: 'Month',
   quarterly: 'Quarter', half_yearly: 'Half Year', yearly: 'Financial Year',
 };
 
+// India FY starts Apr 1: months Apr–Dec belong to that calendar year's FY, Jan–Mar to prev.
+const parseDay = (s) => new Date(s + 'T00:00:00');
+const fyOf = (d) => (d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1);
+const fyLabel = (fy) => `${fy}-${String(fy + 1).slice(-2)}`;
+const fmtISO = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+
+// day string + period → { key, sortKey, label, from, to } for the bucket it
+// belongs to. `from`/`to` are the bucket's date range (used for the drill-down).
+const periodKey = (dayStr, period) => {
+  const d = parseDay(dayStr);
+  const fy = fyOf(d);
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  if (period === 'daily') {
+    return { key: dayStr, sortKey: dayStr, label: fmtDate(dayStr + 'T00:00'), from: dayStr, to: dayStr };
+  }
+  if (period === 'monthly') {
+    const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+    return { key, sortKey: key, label: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
+      from: `${key}-01`, to: fmtISO(new Date(y, m + 1, 0)) };
+  }
+  if (period === 'yearly') {
+    return { key: `${fy}`, sortKey: `${fy}`, label: `FY ${fyLabel(fy)}`, from: `${fy}-04-01`, to: `${fy + 1}-03-31` };
+  }
+  if (period === 'quarterly') {
+    const q = m >= 3 && m <= 5 ? 1 : m >= 6 && m <= 8 ? 2 : m >= 9 && m <= 11 ? 3 : 4;
+    const names = { 1: 'Apr–Jun', 2: 'Jul–Sep', 3: 'Oct–Dec', 4: 'Jan–Mar' };
+    const ranges = {
+      1: [`${fy}-04-01`, `${fy}-06-30`], 2: [`${fy}-07-01`, `${fy}-09-30`],
+      3: [`${fy}-10-01`, `${fy}-12-31`], 4: [`${fy + 1}-01-01`, `${fy + 1}-03-31`],
+    };
+    return { key: `${fy}-Q${q}`, sortKey: `${fy}-Q${q}`, label: `Q${q} ${names[q]} · FY ${fyLabel(fy)}`,
+      from: ranges[q][0], to: ranges[q][1] };
+  }
+  if (period === 'half_yearly') {
+    const h = m >= 3 && m <= 8 ? 1 : 2;
+    const range = h === 1 ? [`${fy}-04-01`, `${fy}-09-30`] : [`${fy}-10-01`, `${fy + 1}-03-31`];
+    return { key: `${fy}-H${h}`, sortKey: `${fy}-H${h}`, label: `H${h} ${h === 1 ? 'Apr–Sep' : 'Oct–Mar'} · FY ${fyLabel(fy)}`,
+      from: range[0], to: range[1] };
+  }
+  // weekly
+  const fyStart = new Date(fy, 3, 1);
+  const wk = Math.floor((d - fyStart) / (1000 * 60 * 60 * 24 * 7)) + 1;
+  const wkStart = new Date(fy, 3, 1 + (wk - 1) * 7);
+  const wkEnd = new Date(wkStart);
+  wkEnd.setDate(wkStart.getDate() + 6);
+  const wkKey = `${fy}-W${String(wk).padStart(2, '0')}`;
+  return { key: wkKey, sortKey: wkKey, label: `Week ${wk} · FY ${fyLabel(fy)}`, from: fmtISO(wkStart), to: fmtISO(wkEnd) };
+};
+
+// Aggregate carton count over a set of per-product totals:
+// boxes = Σ floor(qty / qty_per_box), loose = Σ leftover; no box config ⇒ all loose.
+const cartonize = (products) => {
+  let inBoxes = 0, inLoose = 0, outBoxes = 0, outLoose = 0, inPcs = 0, outPcs = 0;
+  Object.values(products).forEach((p) => {
+    inPcs += p.in; outPcs += p.out;
+    if (p.sub && p.qpb > 0) {
+      inBoxes += Math.floor(p.in / p.qpb); inLoose += p.in % p.qpb;
+      outBoxes += Math.floor(p.out / p.qpb); outLoose += p.out % p.qpb;
+    } else {
+      inLoose += p.in; outLoose += p.out;
+    }
+  });
+  return { inBoxes, inLoose, outBoxes, outLoose, inPcs, outPcs };
+};
+
+// Roll per-(day, product) rows into period buckets, each with aggregate box+loose.
+// Newest bucket first.
+const bucketize = (rows, period) => {
+  const buckets = {};
+  rows.forEach((r) => {
+    const { key, sortKey, label, from, to } = periodKey(r.day, period);
+    if (!buckets[key]) buckets[key] = { label, sortKey, from, to, prods: {} };
+    const prods = buckets[key].prods;
+    if (!prods[r.product_id]) prods[r.product_id] = { qpb: r.qty_per_box, sub: r.sub_unit, in: 0, out: 0 };
+    prods[r.product_id].in += r.in_qty;
+    prods[r.product_id].out += r.out_qty;
+  });
+  return Object.values(buckets)
+    .map((b) => ({ label: b.label, sortKey: b.sortKey, from: b.from, to: b.to, ...cartonize(b.prods) }))
+    .sort((a, b) => String(b.sortKey).localeCompare(String(a.sortKey)));
+};
+
 export default function StockMovements() {
-  const [tab, setTab] = useState('all');
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const productId = searchParams.get('product_id') || '';
+  const type = searchParams.get('type') || 'all';
+  const period = searchParams.get('period') || 'yearly';
+  const fromDate = searchParams.get('from_date') || '';
+  const toDate = searchParams.get('to_date') || '';
+
   const [products, setProducts] = useState([]);
-  const [filterProductId, setFilterProductId] = useState('');
-  const [period, setPeriod] = useState('');
-  const [fyYear, setFyYear] = useState(currentFYYear);
-  const [dailyFrom, setDailyFrom] = useState(toISO(new Date()));
-  const [dailyTo, setDailyTo] = useState(toISO(new Date()));
-  const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState(null);
-  const [rawData, setRawData] = useState([]);
+  const [days, setDays] = useState([]);
+  const [product, setProduct] = useState(null);
   const [totalIn, setTotalIn] = useState(0);
   const [totalOut, setTotalOut] = useState(0);
-  const [searched, setSearched] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState(null);
 
-  const showToast = (msg, type = 'success') => {
-    setToast({ message: msg, type });
+  const showToast = (msg, t = 'success') => {
+    setToast({ message: msg, type: t });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  const updateParams = (updates) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      Object.entries(updates).forEach(([k, v]) => {
+        if (v) next.set(k, String(v));
+        else next.delete(k);
+      });
+      return next;
+    });
   };
 
   useEffect(() => {
     api.get('/products').then((res) => setProducts(res.data)).catch(() => {});
   }, []);
 
-  const fetchMovements = async (productId, movementType, pd, fy, dFrom, dTo) => {
-    try {
-      setLoading(true);
-      let from = '', to = '';
-      if (pd === 'daily') {
-        from = dFrom; to = dTo;
-      } else if (pd === 'weekly' || pd === 'monthly' || pd === 'quarterly' || pd === 'half_yearly') {
-        from = toISO(getFYStart(fy));
-        to = toISO(getFYEnd(fy));
+  // Auto-load: fetch day/product totals whenever the data scope changes (NOT on
+  // period — period is a pure client-side re-grouping of the same rows).
+  useEffect(() => {
+    const fetchSummary = async () => {
+      try {
+        setLoading(true);
+        const params = {};
+        if (productId) params.product_id = productId;
+        if (type !== 'all') params.movement_type = type;
+        if (fromDate) params.from_date = fromDate;
+        if (toDate) params.to_date = toDate;
+
+        const res = await api.get('/inventory/movements-summary', { params });
+        setDays(res.data.days);
+        setProduct(res.data.product);
+        setTotalIn(res.data.total_in);
+        setTotalOut(res.data.total_out);
+      } catch (err) {
+        showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to load movements', 'error');
+      } finally {
+        setLoading(false);
       }
-      // yearly: no date filter — fetch all
+    };
+    fetchSummary();
+  }, [productId, type, fromDate, toDate]);
 
-      const params = { page: 1, limit: 5000 };
-      if (productId) params.product_id = productId;
-      if (movementType && movementType !== 'all') params.movement_type = movementType === 'in' ? 'IN' : 'OUT';
-      if (from) params.from_date = from;
-      if (to) params.to_date = to;
+  const grouped = useMemo(() => bucketize(days, period), [days, period]);
 
-      const res = await api.get('/inventory', { params });
-      setRawData(res.data.data);
-      setTotalIn(res.data.total_in);
-      setTotalOut(res.data.total_out);
-    } catch (err) {
-      showToast((err.response?.data?.error?.message || err.response?.data?.error) || 'Failed to load movements', 'error');
-    } finally {
-      setLoading(false);
-    }
+  // Aggregate box+loose across the whole loaded scope (for the cards / Total row).
+  const scope = useMemo(() => {
+    const prods = {};
+    days.forEach((r) => {
+      if (!prods[r.product_id]) prods[r.product_id] = { qpb: r.qty_per_box, sub: r.sub_unit, in: 0, out: 0 };
+      prods[r.product_id].in += r.in_qty;
+      prods[r.product_id].out += r.out_qty;
+    });
+    return cartonize(prods);
+  }, [days]);
+
+  const colHeader = COL_HEADER[period] || 'Period';
+
+  // Render an aggregate box+loose value as "X Box + Y Pcs". Uses the product's
+  // own unit names when a single product is selected, generic labels otherwise.
+  const boxLabel = product?.sub_unit && product?.qty_per_box ? product.unit : null;
+  const looseLabel = product
+    ? (product.sub_unit && product.qty_per_box ? product.sub_unit : (product.unit || 'Pcs'))
+    : 'Pcs';
+  const renderQty = (boxes, loose) => {
+    const parts = [];
+    if (boxes > 0) parts.push(`${nf(boxes)} ${boxLabel || 'Box'}`);
+    if (loose > 0 || boxes === 0) parts.push(`${nf(loose)} ${looseLabel}`);
+    return parts.join(' + ');
   };
 
-  const handleSearch = () => {
-    if (!filterProductId || !period) {
-      showToast('Please select a product and period', 'error');
-      return;
+  // Balance stays a net figure: box+loose for a single product, plain pcs when mixed.
+  const balancePcs = totalIn - totalOut;
+  const renderBalance = () => {
+    if (product?.sub_unit && product?.qty_per_box) {
+      const a = Math.abs(balancePcs);
+      return `${balancePcs < 0 ? '-' : ''}${renderQty(Math.floor(a / product.qty_per_box), a % product.qty_per_box)}`;
     }
-    setSearched(true);
-    fetchMovements(filterProductId, tab, period, fyYear, dailyFrom, dailyTo);
+    return `${nf(balancePcs)} pcs`;
   };
 
-  const selectedProduct = filterProductId ? products.find((p) => p.id === filterProductId) : null;
-  const inUnit = selectedProduct?.unit || '';
-  const outUnit = selectedProduct?.sub_unit || selectedProduct?.unit || '';
-
-  // Grouping
-  let grouped = [];
-  if (!filterProductId) {
-    grouped = groupByProduct(rawData);
-  } else if (period === 'daily') {
-    grouped = groupByDate(rawData);
-  } else if (period === 'weekly') {
-    grouped = groupByWeek(rawData, fyYear);
-  } else if (period === 'monthly') {
-    grouped = groupByMonth(rawData, fyYear);
-  } else if (period === 'quarterly') {
-    grouped = groupByQuarter(rawData, fyYear);
-  } else if (period === 'half_yearly') {
-    grouped = groupByHalfYear(rawData, fyYear);
-  } else if (period === 'yearly') {
-    grouped = groupByFY(rawData);
-  }
-
-  const colHeader = !filterProductId ? 'Product' : (COL_HEADER[period] || 'Period');
+  // Drill down: In → Material In (Batches), Out → Material Out (Orders),
+  // filtered to this bucket's date range (+ the selected product).
+  const drillTo = (base, r) => {
+    const params = new URLSearchParams();
+    if (productId) params.set('product_id', productId);
+    if (r.from) params.set('from_date', r.from);
+    if (r.to) params.set('to_date', r.to);
+    navigate(`${base}?${params.toString()}`);
+  };
 
   return (
     <div>
@@ -274,30 +216,30 @@ export default function StockMovements() {
 
       <h2 className="text-2xl font-bold text-gray-800 mb-6">Stock Movements</h2>
 
-      {/* Tabs */}
+      {/* Type tabs */}
       <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit">
-        {['all', 'in', 'out'].map((t) => (
+        {[['all', 'All Movements'], ['IN', 'Material In'], ['OUT', 'Material Out']].map(([t, label]) => (
           <button
             key={t}
-            onClick={() => setTab(t)}
+            onClick={() => updateParams({ type: t === 'all' ? null : t })}
             className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
-              tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              type === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            {t === 'all' ? 'All Movements' : t === 'in' ? 'Material In' : 'Material Out'}
+            {label}
           </button>
         ))}
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4 items-end">
-        <div className="w-full sm:w-72">
+        <div className="w-full sm:w-64">
           <label className="block text-xs font-medium text-gray-500 mb-1">Product</label>
           <SearchableSelect
             options={products.map((p) => ({ value: p.id, label: p.product_name }))}
-            value={filterProductId}
-            onChange={setFilterProductId}
-            placeholder="Select Product"
+            value={productId}
+            onChange={(val) => updateParams({ product_id: val || null })}
+            placeholder="All Products"
           />
         </div>
 
@@ -305,10 +247,9 @@ export default function StockMovements() {
           <label className="block text-xs font-medium text-gray-500 mb-1">Period</label>
           <select
             value={period}
-            onChange={(e) => setPeriod(e.target.value)}
+            onChange={(e) => updateParams({ period: e.target.value })}
             className="border border-gray-300 rounded px-3 py-2 text-sm"
           >
-            <option value="">Select Period</option>
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
             <option value="monthly">Monthly</option>
@@ -318,97 +259,50 @@ export default function StockMovements() {
           </select>
         </div>
 
-        {/* FY dropdown — for all periods except Daily and Yearly */}
-        {PERIODS_WITH_FY.includes(period) && (
-          <div className="w-full sm:w-auto">
-            <label className="block text-xs font-medium text-gray-500 mb-1">Financial Year</label>
-            <select
-              value={fyYear}
-              onChange={(e) => setFyYear(Number(e.target.value))}
-              className="border border-gray-300 rounded px-3 py-2 text-sm"
-            >
-              {generateFYOptions().map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-        )}
+        <div className="w-full sm:w-auto">
+          <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
+          <DateInput
+            value={fromDate}
+            onChange={(e) => updateParams({ from_date: e.target.value || null })}
+            className="border border-gray-300 rounded px-3 py-2 w-full sm:w-36 text-sm"
+          />
+        </div>
+        <div className="w-full sm:w-auto">
+          <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
+          <DateInput
+            value={toDate}
+            onChange={(e) => updateParams({ to_date: e.target.value || null })}
+            className="border border-gray-300 rounded px-3 py-2 w-full sm:w-36 text-sm"
+          />
+        </div>
 
-        {/* Date range — only for Daily */}
-        {period === 'daily' && (
-          <>
-            <div className="w-full sm:w-auto">
-              <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
-              <DateInput
-                value={dailyFrom}
-                onChange={(e) => setDailyFrom(e.target.value)}
-                className="border border-gray-300 rounded px-3 py-2 w-full sm:w-36 text-sm"
-              />
-            </div>
-            <div className="w-full sm:w-auto">
-              <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
-              <DateInput
-                value={dailyTo}
-                onChange={(e) => setDailyTo(e.target.value)}
-                className="border border-gray-300 rounded px-3 py-2 w-full sm:w-36 text-sm"
-              />
-            </div>
-          </>
-        )}
-
-        <div className="w-full sm:w-auto self-end">
+        {(fromDate || toDate) && (
           <button
-            onClick={handleSearch}
-            className="bg-blue-600 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-700 transition-colors"
+            onClick={() => updateParams({ from_date: null, to_date: null })}
+            className="text-sm text-gray-500 hover:text-gray-700 underline self-end pb-2"
           >
-            Search
+            Clear dates
           </button>
+        )}
+      </div>
+
+      {/* Summary cards (aggregate box + loose across the whole loaded scope) */}
+      <div className="flex flex-wrap gap-3 mb-4">
+        <div className="bg-green-50 rounded-lg shadow px-4 py-3 min-w-[130px]">
+          <p className="text-xs text-green-600">Total In</p>
+          <p className="text-xl font-bold text-green-800">{renderQty(scope.inBoxes, scope.inLoose)}</p>
+        </div>
+        <div className="bg-red-50 rounded-lg shadow px-4 py-3 min-w-[130px]">
+          <p className="text-xs text-red-600">Total Out</p>
+          <p className="text-xl font-bold text-red-800">{renderQty(scope.outBoxes, scope.outLoose)}</p>
+        </div>
+        <div className="bg-blue-50 rounded-lg shadow px-4 py-3 min-w-[130px]">
+          <p className="text-xs text-blue-600">Balance</p>
+          <p className="text-xl font-bold text-blue-800">{renderBalance()}</p>
         </div>
       </div>
 
-      {/* Summary cards */}
-      {searched && (() => {
-        const outFmt = selectedProduct
-          ? formatQty(totalOut, selectedProduct.unit, selectedProduct.sub_unit, selectedProduct.qty_per_box)
-          : { text: `${totalOut}`, unit: outUnit };
-        return (
-          <div className="flex flex-wrap gap-3 mb-4">
-            <div className="bg-green-50 rounded-lg shadow px-4 py-3 min-w-[100px]">
-              <p className="text-xs text-green-600">Total In</p>
-              <p className="text-xl font-bold text-green-800">
-                {(() => {
-                  const f = selectedProduct
-                    ? formatQty(totalIn, selectedProduct.unit, selectedProduct.sub_unit, selectedProduct.qty_per_box)
-                    : { text: `${totalIn}`, unit: inUnit };
-                  return <>{f.text}{f.unit && <span className="text-sm font-normal ml-1">{f.unit}</span>}</>;
-                })()}
-              </p>
-            </div>
-            <div className="bg-red-50 rounded-lg shadow px-4 py-3 min-w-[100px]">
-              <p className="text-xs text-red-600">Total Out</p>
-              <p className="text-xl font-bold text-red-800">
-                {outFmt.text}{outFmt.unit && <span className="text-sm font-normal ml-1">{outFmt.unit}</span>}
-              </p>
-            </div>
-            <div className="bg-blue-50 rounded-lg shadow px-4 py-3 min-w-[100px]">
-              <p className="text-xs text-blue-600">Balance</p>
-              <p className="text-xl font-bold text-blue-800">
-                {(() => {
-                  const bal = totalIn - totalOut;
-                  const f = selectedProduct
-                    ? formatQty(Math.abs(bal), selectedProduct.unit, selectedProduct.sub_unit, selectedProduct.qty_per_box)
-                    : { text: `${Math.abs(bal)}`, unit: inUnit };
-                  return <>{bal < 0 ? '-' : ''}{f.text}{f.unit && <span className="text-sm font-normal ml-1">{f.unit}</span>}</>;
-                })()}
-              </p>
-            </div>
-          </div>
-        );
-      })()}
-
-      {!searched ? (
-        <p className="text-gray-400 text-sm">Select a product and period, then click Search.</p>
-      ) : loading ? (
+      {loading ? (
         <p className="text-gray-500">Loading...</p>
       ) : grouped.length === 0 ? (
         <p className="text-gray-500">No movements found.</p>
@@ -416,25 +310,25 @@ export default function StockMovements() {
         <>
           {/* Mobile cards */}
           <div className="md:hidden space-y-2">
-            {grouped.map((r, idx) => {
-              const rUnit = filterProductId ? selectedProduct?.unit : r.unit;
-              const rSubUnit = filterProductId ? selectedProduct?.sub_unit : r.sub_unit;
-              const rQpb = filterProductId ? selectedProduct?.qty_per_box : r.qty_per_box;
-              const outFmt = formatQty(r.outQty, rUnit, rSubUnit, rQpb);
-              return (
-                <div key={idx} className="bg-white rounded-lg shadow p-3 flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-800">{r.label}</span>
-                  <div className="flex gap-4">
-                    <span className={`text-sm font-semibold ${r.inQty > 0 ? 'text-green-700' : 'text-gray-300'}`}>
-                      {r.inQty > 0 ? (() => { const f = formatQty(r.inQty, rUnit, rSubUnit, rQpb); return `${f.text}${f.unit ? ' ' + f.unit : ''}`; })() : '—'}
-                    </span>
-                    <span className={`text-sm font-semibold ${r.outQty > 0 ? 'text-red-700' : 'text-gray-300'}`}>
-                      {r.outQty > 0 ? `${outFmt.text}${outFmt.unit ? ' ' + outFmt.unit : ''}` : '—'}
-                    </span>
-                  </div>
+            {grouped.map((r) => (
+              <div key={r.sortKey} className="bg-white rounded-lg shadow p-3 flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-800">{r.label}</span>
+                <div className="flex gap-4 text-right">
+                  <span
+                    onClick={r.inPcs > 0 ? () => drillTo('/batches', r) : undefined}
+                    className={`text-sm font-semibold ${r.inPcs > 0 ? 'text-green-700 underline' : 'text-gray-300'}`}
+                  >
+                    {r.inPcs > 0 ? renderQty(r.inBoxes, r.inLoose) : '—'}
+                  </span>
+                  <span
+                    onClick={r.outPcs > 0 ? () => drillTo('/orders', r) : undefined}
+                    className={`text-sm font-semibold ${r.outPcs > 0 ? 'text-red-700 underline' : 'text-gray-300'}`}
+                  >
+                    {r.outPcs > 0 ? renderQty(r.outBoxes, r.outLoose) : '—'}
+                  </span>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
 
           {/* Desktop table */}
@@ -443,63 +337,37 @@ export default function StockMovements() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">{colHeader}</th>
-                  <th className="px-5 py-3 text-right text-xs font-medium text-green-700 uppercase bg-green-50 w-40">
-                    In Qty{inUnit && <span className="normal-case font-normal ml-1">({inUnit})</span>}
-                  </th>
-                  <th className="px-5 py-3 text-right text-xs font-medium text-red-700 uppercase bg-red-50 w-40">
-                    Out Qty{outUnit && <span className="normal-case font-normal ml-1">({outUnit})</span>}
-                  </th>
+                  <th className="px-5 py-3 text-right text-xs font-medium text-green-700 uppercase bg-green-50 w-52">In Qty</th>
+                  <th className="px-5 py-3 text-right text-xs font-medium text-red-700 uppercase bg-red-50 w-52">Out Qty</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {grouped.map((r, idx) => {
-                  const rUnit = filterProductId ? selectedProduct?.unit : r.unit;
-                  const rSubUnit = filterProductId ? selectedProduct?.sub_unit : r.sub_unit;
-                  const rQpb = filterProductId ? selectedProduct?.qty_per_box : r.qty_per_box;
-                  const outFmt = formatQty(r.outQty, rUnit, rSubUnit, rQpb);
-                  return (
-                    <tr key={idx} className="hover:bg-gray-50">
-                      <td className="px-5 py-2.5 text-sm font-medium text-gray-800">
-                        {r.label}
-                        {r.sublabel && <span className="text-xs text-gray-400 ml-1">({r.sublabel})</span>}
-                      </td>
-                      <td className="px-5 py-2.5 text-sm text-right font-semibold bg-green-50/50">
-                        {r.inQty > 0 ? (() => {
-                          const f = formatQty(r.inQty, rUnit, rSubUnit, rQpb);
-                          return <span className="text-green-700">{f.text}{f.unit && <span className="text-xs font-normal ml-1 text-green-600">{f.unit}</span>}</span>;
-                        })() : <span className="text-gray-200">—</span>}
-                      </td>
-                      <td className="px-5 py-2.5 text-sm text-right font-semibold bg-red-50/50">
-                        {r.outQty > 0
-                          ? <span className="text-red-700">{outFmt.text}{outFmt.unit && <span className="text-xs font-normal ml-1 text-red-600">{outFmt.unit}</span>}</span>
-                          : <span className="text-gray-200">—</span>}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {grouped.map((r) => (
+                  <tr key={r.sortKey} className="hover:bg-gray-50">
+                    <td className="px-5 py-2.5 text-sm font-medium text-gray-800">{r.label}</td>
+                    <td
+                      onClick={r.inPcs > 0 ? () => drillTo('/batches', r) : undefined}
+                      title={r.inPcs > 0 ? 'View Material In for this period' : undefined}
+                      className={`px-5 py-2.5 text-sm text-right font-semibold bg-green-50/50 ${r.inPcs > 0 ? 'cursor-pointer hover:bg-green-100 hover:underline' : ''}`}
+                    >
+                      {r.inPcs > 0 ? <span className="text-green-700">{renderQty(r.inBoxes, r.inLoose)}</span> : <span className="text-gray-200">—</span>}
+                    </td>
+                    <td
+                      onClick={r.outPcs > 0 ? () => drillTo('/orders', r) : undefined}
+                      title={r.outPcs > 0 ? 'View Material Out for this period' : undefined}
+                      className={`px-5 py-2.5 text-sm text-right font-semibold bg-red-50/50 ${r.outPcs > 0 ? 'cursor-pointer hover:bg-red-100 hover:underline' : ''}`}
+                    >
+                      {r.outPcs > 0 ? <span className="text-red-700">{renderQty(r.outBoxes, r.outLoose)}</span> : <span className="text-gray-200">—</span>}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
               <tfoot className="bg-gray-50 border-t-2 border-gray-300">
-                {(() => {
-                  const totOutFmt = selectedProduct
-                    ? formatQty(totalOut, selectedProduct.unit, selectedProduct.sub_unit, selectedProduct.qty_per_box)
-                    : { text: `${totalOut}`, unit: outUnit };
-                  return (
-                    <tr>
-                      <td className="px-5 py-3 text-sm font-bold text-gray-700 text-right">Total</td>
-                      <td className="px-5 py-3 text-sm text-right font-bold text-green-700 bg-green-50">
-                        {(() => {
-                          const f = selectedProduct
-                            ? formatQty(totalIn, selectedProduct.unit, selectedProduct.sub_unit, selectedProduct.qty_per_box)
-                            : { text: `${totalIn}`, unit: inUnit };
-                          return <>{f.text}{f.unit && <span className="text-xs font-normal ml-1">{f.unit}</span>}</>;
-                        })()}
-                      </td>
-                      <td className="px-5 py-3 text-sm text-right font-bold text-red-700 bg-red-50">
-                        {totOutFmt.text}{totOutFmt.unit && <span className="text-xs font-normal ml-1">{totOutFmt.unit}</span>}
-                      </td>
-                    </tr>
-                  );
-                })()}
+                <tr>
+                  <td className="px-5 py-3 text-sm font-bold text-gray-700 text-right">Total</td>
+                  <td className="px-5 py-3 text-sm text-right font-bold text-green-700 bg-green-50">{renderQty(scope.inBoxes, scope.inLoose)}</td>
+                  <td className="px-5 py-3 text-sm text-right font-bold text-red-700 bg-red-50">{renderQty(scope.outBoxes, scope.outLoose)}</td>
+                </tr>
               </tfoot>
             </table>
           </div>

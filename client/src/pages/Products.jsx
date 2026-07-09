@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import api, { getFileUrl } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import SearchableSelect from '../components/SearchableSelect';
@@ -7,22 +7,35 @@ import Pagination from '../components/Pagination';
 
 export default function Products() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(20);
   const [total, setTotal] = useState(0);
+
+  const search = searchParams.get('search') || '';
+  const categoryFilter = searchParams.get('category') || '';
+  const page = parseInt(searchParams.get('page') || '1', 10);
+  const limit = parseInt(searchParams.get('limit') || '20', 10);
 
   const isSalesperson = user?.role === 'salesperson';
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  const updateParams = (updates) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      Object.entries(updates).forEach(([k, v]) => {
+        if (v) next.set(k, v);
+        else next.delete(k);
+      });
+      return next;
+    });
   };
 
   const fetchProducts = useCallback(async (pg, lim, srch, cat) => {
@@ -43,30 +56,26 @@ export default function Products() {
 
   useEffect(() => {
     api.get('/products/categories').then(({ data }) => setCategories(data)).catch(() => {});
-    fetchProducts(1, limit, '', '');
   }, []);
 
+  useEffect(() => {
+    fetchProducts(page, limit, search, categoryFilter);
+  }, [page, limit, search, categoryFilter]);
+
   const handleSearch = (val) => {
-    setSearch(val);
-    setPage(1);
-    fetchProducts(1, limit, val, categoryFilter);
+    updateParams({ search: val, page: null });
   };
 
   const handleCategory = (val) => {
-    setCategoryFilter(val);
-    setPage(1);
-    fetchProducts(1, limit, search, val);
+    updateParams({ category: val, page: null });
   };
 
   const handlePageChange = (pg) => {
-    setPage(pg);
-    fetchProducts(pg, limit, search, categoryFilter);
+    updateParams({ page: pg });
   };
 
   const handleLimitChange = (lim) => {
-    setLimit(lim);
-    setPage(1);
-    fetchProducts(1, lim, search, categoryFilter);
+    updateParams({ limit: lim, page: null });
   };
 
   const handleDelete = async (id) => {

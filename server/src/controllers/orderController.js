@@ -43,10 +43,10 @@ const createOrder = async (req, res, next) => {
 
       // Insert order
       const orderResult = await client.query(
-        `INSERT INTO orders (invoice_number, customer_id, order_date, status, reference_number, party_name, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO orders (invoice_number, customer_id, order_date, status, reference_number, party_name, expires_at, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
-        [invoiceNumber, customer_id, date, isHold ? 'hold' : 'completed', reference_number || null, party_name || null, expiresAt]
+        [invoiceNumber, customer_id, date, isHold ? 'hold' : 'completed', reference_number || null, party_name || null, expiresAt, req.user ? req.user.id : null]
       );
       const order = orderResult.rows[0];
 
@@ -214,11 +214,38 @@ const getAllOrders = async (req, res, next) => {
     const countResult = await pool.query(`SELECT COUNT(*) ${baseFrom}${whereClause}`, params);
     const total = parseInt(countResult.rows[0].count, 10);
 
-    // Get paginated data
+    // Get paginated data — with per-order aggregate carton total (Σ full boxes
+    // across the order's products + Σ leftover loose; no box config ⇒ loose).
     const offset = (Number(page) - 1) * Number(limit);
     params.push(Number(limit));
     params.push(offset);
-    const dataQuery = `SELECT o.*, c.customer_name ${baseFrom}${whereClause} ORDER BY o.invoice_number DESC NULLS LAST LIMIT $${params.length - 1} OFFSET $${params.length}`;
+    const dataQuery = `
+      SELECT o.*, c.customer_name,
+             q.total_boxes, q.total_loose, q.total_qty, q.box_label, q.loose_label
+      FROM orders o
+      JOIN customers c ON c.id = o.customer_id
+      LEFT JOIN LATERAL (
+        SELECT
+          COALESCE(SUM(CASE WHEN sub.sub_unit IS NOT NULL AND sub.qty_per_box > 0 THEN FLOOR(sub.qty / sub.qty_per_box) ELSE 0 END), 0)::int AS total_boxes,
+          COALESCE(SUM(CASE WHEN sub.sub_unit IS NOT NULL AND sub.qty_per_box > 0 THEN (sub.qty % sub.qty_per_box) ELSE sub.qty END), 0)::int AS total_loose,
+          COALESCE(SUM(sub.qty), 0)::int AS total_qty,
+          -- Real unit labels only when the order is a single product; NULL ⇒ generic Box/Pcs.
+          CASE WHEN COUNT(*) = 1 AND MIN(sub.sub_unit) IS NOT NULL AND MIN(sub.qty_per_box) > 0 THEN MIN(sub.unit) END AS box_label,
+          CASE WHEN COUNT(*) = 1 THEN
+            CASE WHEN MIN(sub.sub_unit) IS NOT NULL AND MIN(sub.qty_per_box) > 0 THEN MIN(sub.sub_unit) ELSE MIN(sub.unit) END
+          END AS loose_label
+        FROM (
+          SELECT p.unit, p.qty_per_box, p.sub_unit, SUM(oi.quantity) AS qty
+          FROM order_items oi
+          JOIN products p ON p.id = oi.product_id
+          WHERE oi.order_id = o.id
+          GROUP BY oi.product_id, p.unit, p.qty_per_box, p.sub_unit
+        ) sub
+      ) q ON true
+      ${whereClause}
+      ORDER BY o.invoice_number DESC NULLS LAST
+      LIMIT $${params.length - 1} OFFSET $${params.length}
+    `;
 
     const result = await pool.query(dataQuery, params);
     res.json({ data: result.rows, total, page: Number(page), limit: Number(limit) });
@@ -232,9 +259,11 @@ const getOrderById = async (req, res, next) => {
     const { id } = req.params;
 
     const orderResult = await pool.query(
-      `SELECT o.*, c.customer_name, c.phone, c.email, c.address
+      `SELECT o.*, c.customer_name, c.phone, c.email, c.address,
+              u.name AS created_by_name
        FROM orders o
        JOIN customers c ON c.id = o.customer_id
+       LEFT JOIN users u ON u.id = o.created_by
        WHERE o.id = $1`,
       [id]
     );
