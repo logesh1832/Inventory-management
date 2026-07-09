@@ -18,6 +18,15 @@ const primaryStock = (p) => {
   return p.total_stock;
 };
 
+// Split a product's stock into whole primary-unit count + loose sub-units.
+// For non-boxed products the whole quantity counts as the primary unit.
+const boxLoose = (p) => {
+  if (p.sub_unit && p.qty_per_box) {
+    return { boxes: Math.floor(p.total_stock / p.qty_per_box), loose: p.total_stock % p.qty_per_box };
+  }
+  return { boxes: p.total_stock, loose: 0 };
+};
+
 export default function StockReport() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams, pendingRestore] = usePersistedSearchParams('report_filters');
@@ -121,13 +130,48 @@ export default function StockReport() {
       };
     });
 
+  // Excel rows carry the stock quantities as real numbers (Boxes / Loose /
+  // Total Pieces) so Excel can SUM them — a single "10 Box + 1440 Roll" string
+  // is text and can't be summed.
+  const buildExcelRows = (data) =>
+    data.map((p) => {
+      const { boxes, loose } = boxLoose(p);
+      return {
+        'Product Name': p.product_name,
+        'Category': p.category || '-',
+        'Boxes': boxes,
+        'Loose': loose,
+        'Total Pieces': p.total_stock,
+        'Unit': p.unit,
+        'Sub Unit': p.sub_unit || '-',
+        'Threshold': p.low_stock_threshold ?? 50,
+        'Status': stockStatus(primaryStock(p), p.low_stock_threshold ?? 50),
+      };
+    });
+
   const exportExcel = async () => {
     setExporting(true);
     try {
       const data = await fetchAllForExport();
-      const rows = buildRows(data);
+      const rows = buildExcelRows(data);
       const ws = XLSX.utils.json_to_sheet(rows);
-      ws['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 12 }, { wch: 10 }];
+      ws['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 10 }];
+
+      // TOTAL row uses live SUM() formulas (cols C=Boxes, D=Loose, E=Total
+      // Pieces) so Excel recalculates when the user adds or deletes rows.
+      const n = rows.length;              // data row count
+      if (n > 0) {
+        const lastDataRow = n + 1;        // Excel row of last data (header = row 1)
+        const totalRow = n + 2;           // Excel row of the TOTAL line
+        ws[`A${totalRow}`] = { t: 's', v: 'TOTAL' };
+        ['C', 'D', 'E'].forEach((col) => {
+          ws[`${col}${totalRow}`] = { t: 'n', f: `SUM(${col}2:${col}${lastDataRow})` };
+        });
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        range.e.r = totalRow - 1;         // extend range to include TOTAL (0-based)
+        ws['!ref'] = XLSX.utils.encode_range(range);
+      }
+
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Stock Report');
       const fileName = `stock-report${lowStockOnly ? '-low-stock' : ''}${selectedCategory ? `-${selectedCategory}` : ''}.xlsx`;
