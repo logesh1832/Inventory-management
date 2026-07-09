@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import Pagination from '../components/Pagination';
+import usePersistedSearchParams from '../utils/usePersistedSearchParams';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -19,16 +20,28 @@ const primaryStock = (p) => {
 
 export default function StockReport() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams, pendingRestore] = usePersistedSearchParams('report_filters');
+  const searchTerm = searchParams.get('search') || '';
+  const selectedCategory = searchParams.get('category') || '';
+  const lowStockOnly = searchParams.get('low_stock') === '1';
+  const page = parseInt(searchParams.get('page') || '1', 10);
+  const limit = parseInt(searchParams.get('limit') || '20', 10);
   const [stock, setStock] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [lowStockOnly, setLowStockOnly] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(20);
   const [total, setTotal] = useState(0);
   const [exporting, setExporting] = useState(false);
+
+  const updateParams = (updates) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      Object.entries(updates).forEach(([k, v]) => {
+        if (v) next.set(k, String(v));
+        else next.delete(k);
+      });
+      return next;
+    });
+  };
 
   const fetchStock = useCallback(async (pg, lim, lowStock, category, search) => {
     try {
@@ -48,38 +61,33 @@ export default function StockReport() {
   }, []);
 
   useEffect(() => {
-    fetchStock(1, limit, false, '', '');
     api.get('/products/categories').then((res) => setCategories(res.data)).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (pendingRestore) return; // wait for persisted filters to restore, then fetch once
+    fetchStock(page, limit, lowStockOnly, selectedCategory, searchTerm);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, limit, lowStockOnly, selectedCategory, searchTerm, pendingRestore]);
+
   const handleLowStockToggle = () => {
-    const next = !lowStockOnly;
-    setLowStockOnly(next);
-    setPage(1);
-    fetchStock(1, limit, next, selectedCategory, searchTerm);
+    updateParams({ low_stock: lowStockOnly ? null : '1', page: null });
   };
 
   const handleCategoryChange = (e) => {
-    setSelectedCategory(e.target.value);
-    setPage(1);
-    fetchStock(1, limit, lowStockOnly, e.target.value, searchTerm);
+    updateParams({ category: e.target.value, page: null });
   };
 
   const handleSearch = (val) => {
-    setSearchTerm(val);
-    setPage(1);
-    fetchStock(1, limit, lowStockOnly, selectedCategory, val);
+    updateParams({ search: val, page: null });
   };
 
   const handlePageChange = (pg) => {
-    setPage(pg);
-    fetchStock(pg, limit, lowStockOnly, selectedCategory, searchTerm);
+    updateParams({ page: pg });
   };
 
   const handleLimitChange = (lim) => {
-    setLimit(lim);
-    setPage(1);
-    fetchStock(1, lim, lowStockOnly, selectedCategory, searchTerm);
+    updateParams({ limit: lim, page: null });
   };
 
   const fetchAllForExport = async () => {
