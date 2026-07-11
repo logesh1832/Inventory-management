@@ -188,9 +188,11 @@ const getAllOrders = async (req, res, next) => {
       params.push(customer_id);
       conditions.push(`o.customer_id = $${params.length}`);
     }
+    let productParamIdx = null;
     if (product_id) {
       params.push(product_id);
-      conditions.push(`EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id AND oi.product_id = $${params.length})`);
+      productParamIdx = params.length;
+      conditions.push(`EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id AND oi.product_id = $${productParamIdx})`);
     }
     if (status) {
       params.push(status);
@@ -238,7 +240,7 @@ const getAllOrders = async (req, res, next) => {
           SELECT p.unit, p.qty_per_box, p.sub_unit, SUM(oi.quantity) AS qty
           FROM order_items oi
           JOIN products p ON p.id = oi.product_id
-          WHERE oi.order_id = o.id
+          WHERE oi.order_id = o.id${productParamIdx ? ` AND oi.product_id = $${productParamIdx}` : ''}
           GROUP BY oi.product_id, p.unit, p.qty_per_box, p.sub_unit
         ) sub
       ) q ON true
