@@ -442,35 +442,70 @@ const getProductMovements = async (req, res, next) => {
 
     const whereClause = conditions.length > 0 ? ' AND ' + conditions.join(' AND ') : '';
 
-    // Get total count + aggregated totals
+    // FEFO writes one movement per batch consumed, so a single MO/MI can span several
+    // rows. Collapse those back into one row per voucher+batch: IN always carries a
+    // voucher_number (MI-xxxx) and OUT never does (it links to an order via
+    // reference_id), so the COALESCE below picks the right key for each. Grouping on
+    // batch_number keeps genuinely different lots apart, while unnumbered batches
+    // (tapes) fold together because GROUP BY treats NULLs as equal.
+    const groupKey = `COALESCE(sm.voucher_number, sm.reference_id::text, sm.id::text)`;
+    const groupByClause = `
+      ${groupKey},
+      sm.movement_type,
+      sm.reference_type,
+      sm.voucher_number,
+      sm.reference_number,
+      ib.batch_number,
+      p.product_name, p.product_code, p.unit, p.sub_unit, p.qty_per_box,
+      c_supplier.customer_name,
+      o.invoice_number, o.reference_number,
+      c_order.customer_name
+    `;
+
+    // Count grouped rows, not raw movements, so pagination matches what is rendered.
     const countResult = await pool.query(
-      `SELECT COUNT(*) AS count,
-              COALESCE(SUM(CASE WHEN sm.movement_type = 'IN' THEN sm.quantity ELSE 0 END), 0)::int AS total_in,
+      `SELECT COUNT(*)::int AS count
+       FROM (SELECT 1 ${baseFrom}${whereClause} GROUP BY ${groupByClause}) g`,
+      params
+    );
+    const total = countResult.rows[0].count;
+
+    // Totals sum raw quantities, so grouping does not affect them.
+    const totalsResult = await pool.query(
+      `SELECT COALESCE(SUM(CASE WHEN sm.movement_type = 'IN' THEN sm.quantity ELSE 0 END), 0)::int AS total_in,
               COALESCE(SUM(CASE WHEN sm.movement_type = 'OUT' THEN sm.quantity ELSE 0 END), 0)::int AS total_out
        ${baseFrom}${whereClause}`,
       params
     );
-    const { count, total_in, total_out } = countResult.rows[0];
-    const total = parseInt(count, 10);
+    const { total_in, total_out } = totalsResult.rows[0];
 
     // Get paginated data
     const offset = (Number(page) - 1) * Number(limit);
     params.push(Number(limit));
     params.push(offset);
 
+    // id and reference_id are uuid, which has no min()/max() aggregate in Postgres.
     const dataQuery = `
       SELECT
-        sm.*,
+        (array_agg(sm.id))[1] AS id,
+        (array_agg(sm.reference_id))[1] AS reference_id,
+        MAX(sm.created_at) AS created_at,
+        SUM(sm.quantity)::int AS quantity,
+        sm.movement_type,
+        sm.reference_type,
+        sm.voucher_number,
+        sm.reference_number,
+        ib.batch_number,
         p.product_name,
         p.product_code,
-        ib.batch_number,
         p.unit, p.sub_unit, p.qty_per_box,
         c_supplier.customer_name AS supplier_name,
         o.invoice_number,
         o.reference_number AS order_reference,
         c_order.customer_name AS customer_name
       ${baseFrom}${whereClause}
-      ORDER BY sm.created_at DESC
+      GROUP BY ${groupByClause}
+      ORDER BY MAX(sm.created_at) DESC
       LIMIT $${params.length - 1} OFFSET $${params.length}
     `;
 
