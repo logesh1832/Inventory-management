@@ -72,10 +72,18 @@ const getAllProducts = async (req, res, next) => {
 };
 
 // GET /api/products/categories
+// Union of the managed categories and whatever is already stored on products.
+// Reading products alone would hide every category that no product uses yet, so a
+// newly created one could never be picked; reading the table alone would drop the
+// free-text values legacy products still carry, blanking their category on edit.
+// UNION dedupes the overlap.
 const getCategories = async (req, res, next) => {
   try {
     const result = await pool.query(
-      "SELECT DISTINCT category FROM products WHERE category IS NOT NULL ORDER BY category"
+      `SELECT category_name AS category FROM categories WHERE is_active = true
+       UNION
+       SELECT category FROM products WHERE category IS NOT NULL
+       ORDER BY category`
     );
     res.json(result.rows.map(r => r.category));
   } catch (err) {
