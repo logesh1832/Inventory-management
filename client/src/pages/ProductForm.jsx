@@ -69,6 +69,7 @@ export default function ProductForm() {
   const validate = () => {
     const newErrors = {};
     if (!form.product_name.trim()) newErrors.product_name = 'Product name is required';
+    if (!form.category) newErrors.category = 'Category is required';
     if (!form.unit) newErrors.unit = 'Unit is required';
     if (form.sub_unit && (!form.qty_per_box || Number(form.qty_per_box) <= 0)) {
       newErrors.qty_per_box = `Qty per ${form.sub_unit} is required when sub unit is set`;
@@ -166,13 +167,20 @@ export default function ProductForm() {
 
         {/* Category */}
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Category <span className="text-red-500">*</span>
+          </label>
           <SearchableSelect
             options={categoryOptions.map((c) => ({ value: c, label: c }))}
             value={form.category}
-            onChange={(val) => setForm((prev) => ({ ...prev, category: val }))}
+            onChange={(val) => {
+              setForm((prev) => ({ ...prev, category: val }));
+              if (errors.category) setErrors((prev) => ({ ...prev, category: undefined }));
+            }}
             placeholder="Select Category"
+            error={!!errors.category}
           />
+          {errors.category && <p className="text-red-500 text-xs mt-1">{errors.category}</p>}
         </div>
 
         {/* Product Image */}

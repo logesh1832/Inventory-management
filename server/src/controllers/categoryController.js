@@ -80,12 +80,26 @@ const createCategory = async (req, res, next) => {
 };
 
 // PUT /api/categories/:id
+// Products store their category as free text matched by name, so a rename here must
+// cascade onto every product carrying the old name — otherwise those products would
+// silently lose their category. Wrapped in a transaction so the rename and the cascade
+// either both succeed or both roll back.
 const updateCategory = async (req, res, next) => {
+  const client = await pool.connect();
   try {
     const { id } = req.params;
     const { category_name, description, is_active } = req.body;
 
-    const result = await pool.query(
+    await client.query('BEGIN');
+
+    const existing = await client.query('SELECT category_name FROM categories WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    const oldName = existing.rows[0].category_name;
+
+    const result = await client.query(
       `UPDATE categories
        SET category_name = COALESCE($1, category_name),
            description = COALESCE($2, description),
@@ -95,16 +109,26 @@ const updateCategory = async (req, res, next) => {
       [category_name?.trim() || null, description?.trim() || null, is_active ?? null, id]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Category not found' });
+    const newName = result.rows[0].category_name;
+    let productsUpdated = 0;
+    if (newName !== oldName) {
+      const cascade = await client.query(
+        'UPDATE products SET category = $1 WHERE category = $2',
+        [newName, oldName]
+      );
+      productsUpdated = cascade.rowCount;
     }
 
-    res.json(result.rows[0]);
+    await client.query('COMMIT');
+    res.json({ ...result.rows[0], products_updated: productsUpdated });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     if (err.code === '23505') {
       return res.status(409).json({ error: 'Category name already exists' });
     }
     next(err);
+  } finally {
+    client.release();
   }
 };
 

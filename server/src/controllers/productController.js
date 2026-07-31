@@ -6,8 +6,8 @@ const createProduct = async (req, res, next) => {
     const { product_name, product_code, unit, sub_unit, category, batch_tracking, qty_per_box, low_stock_threshold } = req.body;
     const image_url = req.file ? `/uploads/products/${req.file.filename}` : null;
 
-    if (!product_name || !unit) {
-      return res.status(400).json({ error: 'product_name and unit are required' });
+    if (!product_name || !unit || !category?.trim()) {
+      return res.status(400).json({ error: 'product_name, unit and category are required' });
     }
 
     const code = product_code?.trim() || product_name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/-+$/, '');
@@ -72,18 +72,15 @@ const getAllProducts = async (req, res, next) => {
 };
 
 // GET /api/products/categories
-// Union of the managed categories and whatever is already stored on products.
-// Reading products alone would hide every category that no product uses yet, so a
-// newly created one could never be picked; reading the table alone would drop the
-// free-text values legacy products still carry, blanking their category on edit.
-// UNION dedupes the overlap.
+// Single source of truth: the managed categories table. Every category products
+// currently use has been backfilled into this table, so reading it alone no longer
+// hides any in-use value, and the dropdown now always matches the Categories page.
+// Deactivated categories are excluded so they can't be picked for new products.
 const getCategories = async (req, res, next) => {
   try {
     const result = await pool.query(
       `SELECT category_name AS category FROM categories WHERE is_active = true
-       UNION
-       SELECT category FROM products WHERE category IS NOT NULL
-       ORDER BY category`
+       ORDER BY category_name`
     );
     res.json(result.rows.map(r => r.category));
   } catch (err) {

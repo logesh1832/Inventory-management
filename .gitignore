@@ -6,3 +6,4 @@ build/
 *.log
 .claude/
 server/uploads/
+db-backups/
