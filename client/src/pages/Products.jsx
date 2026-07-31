@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import api, { getFileUrl } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import SearchableSelect from '../components/SearchableSelect';
 import Pagination from '../components/Pagination';
+import usePersistedSearchParams from '../utils/usePersistedSearchParams';
 
 export default function Products() {
   const { user } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams, pendingRestore] = usePersistedSearchParams('products_filters');
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -59,8 +60,9 @@ export default function Products() {
   }, []);
 
   useEffect(() => {
+    if (pendingRestore) return; // wait for persisted filters to restore, then fetch once
     fetchProducts(page, limit, search, categoryFilter);
-  }, [page, limit, search, categoryFilter]);
+  }, [page, limit, search, categoryFilter, pendingRestore]);
 
   const handleSearch = (val) => {
     updateParams({ search: val, page: null });
